@@ -981,14 +981,10 @@ CONFIG_PARTITION_TABLE_MD5=y
 #
 # ESP-NN
 #
+CONFIG_NN_ANSI_C=y
+# CONFIG_NN_OPTIMIZED is not set
 # default:
-# CONFIG_NN_ANSI_C is not set
-# default:
-CONFIG_NN_OPTIMIZED=y
-# default:
-CONFIG_NN_OPTIMIZATIONS=1
-# default:
-# CONFIG_NN_SKIP_NUDGE is not set
+CONFIG_NN_OPTIMIZATIONS=0
 # end of ESP-NN
 
 #

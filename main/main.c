@@ -8,18 +8,15 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "auto_scan.h"
 #include "buzzer.h"
-#include "coleta_mpu6050.h"
-#include "gesto.h"
-#include "gesto_model_data.h"
-#include "gesto_tflite.h"
+#include "hcsr04.h"
 #include "ia_jogo_da_velha.h"
 #include "ia_tflite.h"
 #include "jogo_da_velha.h"
+#include "ldr.h"
 #include "lcd1602_i2c.h"
 #include "leds.h"
-#include "mpu6050.h"
+#include "presenca_tflite.h"
 #include "ssd1306_i2c.h"
 #include "teclado_matricial.h"
 
@@ -36,8 +33,15 @@
 #define LCD_FREQ_HZ 100000
 
 #define INTERVALO_MENU_MS 80
+#define INTERVALO_COLETA_HCSR04_MS 100
+#define INTERVALO_PRESENCA_LOG_MS 1000
+#define INTERVALO_LCD_AUTORES_MS 350
+#define LCD_AUTORES_TEXTO "Projeto Final: Jogo da Velha (Patrik & Janiel)"
+#define COLETA_HCSR04_CABECALHO_CSV "timestamp_ms,distancia_cm,eco_us,label"
+#define COLETA_HCSR04_LABEL_AUSENTE 0
+#define COLETA_HCSR04_LABEL_PRESENTE 1
 
-static const char *TAG = "jogo_da_velha";
+static const char *TAG = "ProjetoFinal_Patrik";
 
 static ssd1306_t oled;
 static lcd1602_t lcd;
@@ -45,35 +49,49 @@ static teclado_matricial_t teclado;
 static leds_t leds;
 static buzzer_t buzzer;
 static jogo_estado_t jogo;
-static mpu6050_t mpu;
-static bool mpu_pronto;
-static gesto_tflite_t modelo_gesto;
 static ia_tflite_t modelo_ia;
+static presenca_tflite_t modelo_presenca;
+static hcsr04_t sensor_hcsr04;
+static ldr_t sensor_luz;
+static bool sensor_hcsr04_pronto;
+static bool sensor_luz_pronto;
+static bool luz_dourada_manual;
+static int ldr_histerese_estado;
+static bool presenca_log_iniciado;
+static bool ultima_presenca_logada;
+static uint32_t ultimo_log_presenca_ms;
+static bool lcd_status_iniciado;
+static uint32_t ultimo_lcd_status_ms;
+static uint32_t lcd_autores_passo;
 
+static void mostrar_hello_world_treinamento(void);
+static void imprimir_acuracia_modelo(const char *rotulo, int valor_permyriad);
 static void mostrar_manual_serial(void);
-static void inicializar_mpu6050(void);
-static void inicializar_modelos_tinyml(void);
+static void inicializar_sensores(void);
+static void inicializar_modelo_ia(void);
+static void exibir_oled_linhas(const char *origem, const char *linhas[], int quantidade);
+static void espelhar_oled_console(const char *origem, const char *linhas[], int quantidade);
 static void mostrar_menu(void);
-static void mostrar_menu_coleta(int label);
+static void mostrar_menu_coleta_hcsr04(int label);
 static void mostrar_tabuleiro(void);
-static void mostrar_tabuleiro_com_cursor(int posicao_cursor);
 static void mostrar_placar(void);
 static void mostrar_autor(void);
 static void mostrar_placar_zerado(void);
 static void mostrar_mensagem(const char *linha1, const char *linha2, const char *linha3);
+static void atualizar_lcd_status_ia(bool forcar);
 static void atualizar_lcd_algoritmo(const ia_resultado_t *resultado);
-static char aguardar_tecla(void);
+static const char *texto_lcd_algoritmo(const ia_resultado_t *resultado);
 static bool aguardar_jogada_teclado(int *posicao);
-static bool aguardar_jogada_jogador(int *posicao);
-static void coletar_dados_mpu6050(void);
+static void atualizar_presenca_ambiente(void);
+static void atualizar_luz_automatica(void);
+static void coletar_dados_hcsr04(void);
 static void jogar_partida(void);
-static void jogar_partida_com_gesto(void);
-static bool processar_resultado(char ultimo_jogador);
 static void parar_programa(void);
 static uint32_t ler_millis(void);
 
 void app_main(void)
 {
+    mostrar_hello_world_treinamento();
     mostrar_manual_serial();
 
     ssd1306_config_t config_oled = {
@@ -93,20 +111,25 @@ void app_main(void)
     };
 
     ESP_ERROR_CHECK(ssd1306_iniciar(&oled, &config_oled));
-    inicializar_mpu6050();
     ESP_ERROR_CHECK(lcd1602_iniciar(&lcd, &config_lcd));
     ESP_ERROR_CHECK(teclado_matricial_iniciar(&teclado));
     ESP_ERROR_CHECK(leds_iniciar(&leds));
     ESP_ERROR_CHECK(buzzer_iniciar(&buzzer));
-    inicializar_modelos_tinyml();
+    inicializar_sensores();
+    inicializar_modelo_ia();
 
     jogo_iniciar(&jogo);
-    ESP_ERROR_CHECK(lcd1602_escrever_linha(&lcd, 0, "Jogo da Velha"));
-    ESP_ERROR_CHECK(lcd1602_escrever_linha(&lcd, 1, modelo_ia.pronto ? "IA TFLite" : "IA minimax"));
+    lcd_status_iniciado = false;
+    ultimo_lcd_status_ms = 0;
+    lcd_autores_passo = 0;
+    atualizar_lcd_status_ia(true);
     buzzer_som_inicial();
     mostrar_menu();
 
     while (true) {
+        atualizar_presenca_ambiente();
+        atualizar_luz_automatica();
+        atualizar_lcd_status_ia(false);
         char tecla = teclado_matricial_ler(&teclado);
 
         if (tecla != 0) {
@@ -116,17 +139,15 @@ void app_main(void)
 
         switch (tecla) {
         case '*':
+            luz_dourada_manual = true;
             leds_definir_dourado(&leds, true);
             break;
         case '#':
+            luz_dourada_manual = true;
             leds_definir_dourado(&leds, false);
             break;
         case 'A':
             jogar_partida();
-            mostrar_menu();
-            break;
-        case '8':
-            jogar_partida_com_gesto();
             mostrar_menu();
             break;
         case 'B':
@@ -143,7 +164,7 @@ void app_main(void)
             mostrar_placar_zerado();
             break;
         case '9':
-            coletar_dados_mpu6050();
+            coletar_dados_hcsr04();
             mostrar_menu();
             break;
         default:
@@ -155,57 +176,122 @@ void app_main(void)
     }
 }
 
+static void mostrar_hello_world_treinamento(void)
+{
+    printf("\n");
+    printf("\033[1;36m============================================================\033[0m\n");
+    printf("\033[1;33m    Projeto Final: Jogo da Velha com IA (ESP32-S3)\033[0m\n");
+    printf("\033[1;36m============================================================\033[0m\n");
+    printf("Fala pessoal! Aqui e o Patrik. Este e o resumo do sistema:\n\n");
+    printf("Como a IA foi treinada:\n");
+    printf("  1. Criei o dataset e treinei o modelo em Python (Keras)\n");
+    printf("  2. Converti pra TFLite e apliquei quantizacao INT8\n");
+    printf("  3. Transformei o modelo em um array C e embarquei aqui\n\n");
+    
+    printf("\033[1;32m[+] Modelos Embarcados Ativos:\033[0m\n");
+    printf("  -> \033[1;37mJogo da Velha (TFLite INT8)\033[0m\n");
+    printf("     Entrada: %d | Saida: %d | Dataset: %d linhas\n", 
+           TICTACTOE_MODEL_INPUT_SIZE, TICTACTOE_MODEL_OUTPUT_SIZE, TICTACTOE_MODEL_DATASET_ROWS);
+    printf("     Tamanho do Modelo: %u bytes | Arena: %d bytes\n", 
+           (unsigned int)TICTACTOE_MODEL_TFLITE_LEN, TICTACTOE_MODEL_TENSOR_ARENA_BYTES);
+    printf("     Hash SHA: %.12s\n", TICTACTOE_MODEL_INT8_SHA256);
+    imprimir_acuracia_modelo("     Taxa de Jogada Otima", TICTACTOE_MODEL_OPTIMAL_MOVE_PERMYRIAD);
+    printf("\n");
+    
+    printf("  -> \033[1;37mPresenca HC-SR04 (TFLite INT8)\033[0m\n");
+    printf("     Entrada: %d | Saida: %d | Dataset: %d linhas\n", 
+           PRESENCA_MODEL_INPUT_SIZE, PRESENCA_MODEL_OUTPUT_SIZE, PRESENCA_MODEL_DATASET_ROWS);
+    printf("     Tamanho do Modelo: %u bytes | Arena: %d bytes\n", 
+           (unsigned int)PRESENCA_MODEL_TFLITE_LEN, PRESENCA_MODEL_TENSOR_ARENA_BYTES);
+    printf("     Hash SHA: %.12s\n", PRESENCA_MODEL_INT8_SHA256);
+    imprimir_acuracia_modelo("     Acuracia de Teste", PRESENCA_MODEL_TEST_ACCURACY_PERMYRIAD);
+    printf("\n");
+    
+    printf("\033[1;35m[i] Monitoramento do OLED ativado.\033[0m Tudo que aparecer na telinha \n");
+    printf("sera espelhado aqui embaixo no console pra facilitar os testes.\n");
+    printf("\033[1;36m============================================================\033[0m\n\n");
+    fflush(stdout);
+}
+
+static void imprimir_acuracia_modelo(const char *rotulo, int valor_permyriad)
+{
+    if (valor_permyriad < 0) {
+        printf("%s: indisponivel no header atual\n", rotulo);
+        return;
+    }
+
+    printf("%s: %d.%02d%%\n", rotulo, valor_permyriad / 100, valor_permyriad % 100);
+}
+
 static void mostrar_manual_serial(void)
 {
-    ESP_LOGI(TAG, "=== Jogo da Velha ESP32-S3 ===");
-    ESP_LOGI(TAG, "O jogador utiliza O e o computador utiliza X.");
-    ESP_LOGI(TAG, "Teclas 1 a 9 selecionam a posicao desejada no tabuleiro.");
-    ESP_LOGI(TAG, "A=jogar, B=placar, C=encerrar, D=autor, 0=zerar placar.");
-    ESP_LOGI(TAG, "Tecla 8 inicia partida com gesto/auto-scan; tecla 9 inicia coleta CSV do MPU6050.");
-    ESP_LOGI(TAG, "Na coleta, 0=repouso, 1=confirmar, D=sair.");
-    ESP_LOGI(TAG, "* liga LED dourado e # desliga LED dourado.");
-    ESP_LOGI(TAG, "OLED exibe menu e tabuleiro; LCD exibe o algoritmo de IA utilizado.");
+    ESP_LOGI(TAG, "Iniciando o Jogo da Velha...");
+    ESP_LOGI(TAG, "Dica: O jogador usa 'O' e a Inteligencia Artificial usa 'X'.");
+    ESP_LOGI(TAG, "Utilize as teclas de 1 a 9 no teclado matricial para jogar.");
+    ESP_LOGI(TAG, "Teclas * e # acendem e apagam o LED dourado manualmente.");
+    ESP_LOGI(TAG, "Atalhos: A=Jogar, B=Placar, C=Sair, D=Creditos, 0=Zerar placar.");
+    ESP_LOGI(TAG, "HC-SR04 rodando classificador TFLite em background.");
 }
 
-static void inicializar_mpu6050(void)
+static void inicializar_sensores(void)
 {
-    mpu_pronto = false;
-    esp_err_t erro = mpu6050_iniciar(&mpu, oled.barramento);
+    sensor_hcsr04_pronto = false;
+    sensor_luz_pronto = false;
+    presenca_log_iniciado = false;
+    ultima_presenca_logada = false;
+    ultimo_log_presenca_ms = 0;
 
+    esp_err_t erro = hcsr04_iniciar(&sensor_hcsr04, HCSR04_TRIGGER_GPIO, HCSR04_ECHO_GPIO);
     if (erro != ESP_OK) {
-        ESP_LOGW(TAG, "MPU6050 indisponivel (%s); jogo segue pelo teclado.", esp_err_to_name(erro));
-        return;
-    }
-
-    int16_t ax = 0;
-    int16_t ay = 0;
-    int16_t az = 0;
-    erro = mpu6050_ler_aceleracao(&mpu, &ax, &ay, &az);
-
-    if (erro != ESP_OK) {
-        ESP_LOGW(TAG, "MPU6050 iniciou, mas a leitura inicial falhou (%s).", esp_err_to_name(erro));
-        return;
-    }
-
-    mpu_pronto = true;
-    ESP_LOGI(TAG, "MPU6050 pronto: ax=%d ay=%d az=%d", ax, ay, az);
-}
-
-static void inicializar_modelos_tinyml(void)
-{
-    esp_err_t erro_gesto = gesto_tflite_iniciar(&modelo_gesto);
-    if (erro_gesto != ESP_OK) {
-        ESP_LOGW(TAG, "Modelo de gesto indisponivel (%s); heuristica sera usada.", esp_err_to_name(erro_gesto));
+        ESP_LOGW(TAG, "HC-SR04 indisponivel (%s); jogo segue pelo teclado.", esp_err_to_name(erro));
     } else {
-        ESP_LOGI(TAG, "Modelo de gesto pronto; arena sugerida: %d bytes", GESTO_MODEL_TENSOR_ARENA_BYTES);
+        sensor_hcsr04_pronto = true;
+        ESP_LOGI(TAG, "HC-SR04 pronto: TRIG=%d ECHO=%d", HCSR04_TRIGGER_GPIO, HCSR04_ECHO_GPIO);
     }
 
+    erro = presenca_tflite_iniciar(&modelo_presenca);
+    if (erro != ESP_OK) {
+        ESP_LOGW(TAG, "Modelo de presenca indisponivel (%s); classificador compacto sera usado.", esp_err_to_name(erro));
+    } else {
+        ESP_LOGI(TAG,
+                 "Modelo de presenca pronto (%s); arena sugerida: %d bytes",
+                 modelo_presenca.runtime_tflite ? "TFLite" : "compacto",
+                 modelo_presenca.arena_bytes);
+    }
+
+    erro = ldr_iniciar(&sensor_luz);
+    if (erro != ESP_OK) {
+        ESP_LOGW(TAG, "LDR indisponivel (%s); LED dourado segue por teclado.", esp_err_to_name(erro));
+    } else {
+        sensor_luz_pronto = true;
+        ESP_LOGI(TAG, "LDR pronto: GPIO%d ADC1_CH9", LDR_GPIO_NUM);
+    }
+}
+
+static void inicializar_modelo_ia(void)
+{
     esp_err_t erro_ia = ia_tflite_iniciar(&modelo_ia);
     if (erro_ia != ESP_OK) {
-        ESP_LOGW(TAG, "Modelo TFLite do jogo indisponivel (%s); minimax sera usado.", esp_err_to_name(erro_ia));
+        ESP_LOGE(TAG, "Modelo TFLite do jogo indisponivel (%s); nenhuma outra IA sera executada.", esp_err_to_name(erro_ia));
     } else {
         ESP_LOGI(TAG, "Modelo do jogo pronto; arena sugerida: %d bytes", modelo_ia.arena_bytes);
     }
+}
+
+static void exibir_oled_linhas(const char *origem, const char *linhas[], int quantidade)
+{
+    espelhar_oled_console(origem, linhas, quantidade);
+    ssd1306_mostrar_linhas(&oled, linhas, quantidade); /* ignora falha I2C */
+}
+
+static void espelhar_oled_console(const char *origem, const char *linhas[], int quantidade)
+{
+    printf("\n\033[1;34m=== Tela OLED: %s ===\033[0m\n", origem != NULL ? origem : "GERAL");
+    for (int i = 0; i < quantidade; i++) {
+        printf("  | %s\n", linhas[i] != NULL ? linhas[i] : "");
+    }
+    printf("\033[1;34m=======================\033[0m\n\n");
+    fflush(stdout);
 }
 
 static void mostrar_menu(void)
@@ -219,24 +305,22 @@ static void mostrar_menu(void)
         "Escolha ",
     };
 
-    ESP_ERROR_CHECK(ssd1306_mostrar_linhas(&oled, linhas, 6));
+    exibir_oled_linhas("MENU", linhas, 6);
 }
 
-static void mostrar_menu_coleta(int label)
+static void mostrar_menu_coleta_hcsr04(int label)
 {
-    const char *label_texto = label == COLETA_MPU6050_LABEL_CONFIRMAR ? "LABEL 1" : "LABEL 0";
-    const char *descricao = label == COLETA_MPU6050_LABEL_CONFIRMAR ? "CONFIRMAR" : "REPOUSO";
+    const char *descricao = label == COLETA_HCSR04_LABEL_PRESENTE ? "1 PRESENTE" : "0 AUSENTE";
     const char *linhas[] = {
-        "COLETA MPU",
-        label_texto,
+        "COLETA HC-SR04",
         descricao,
-        "0 REPOUSO",
-        "1 CONFIRM",
+        "0 AUSENTE",
+        "1 PRESENTE",
         "D SAIR",
         "CSV SERIAL",
     };
 
-    ESP_ERROR_CHECK(ssd1306_mostrar_linhas(&oled, linhas, 7));
+    exibir_oled_linhas("COLETA_HCSR04", linhas, 6);
 }
 
 static void mostrar_tabuleiro(void)
@@ -259,52 +343,7 @@ static void mostrar_tabuleiro(void)
         " ",
     };
 
-    ESP_ERROR_CHECK(ssd1306_mostrar_linhas(&oled, linhas, 7));
-}
-
-static void formatar_linha_com_cursor(int linha, int posicao_cursor, char *saida, size_t tamanho)
-{
-    char celulas[JOGO_TAMANHO][4];
-
-    for (int coluna = 0; coluna < JOGO_TAMANHO; coluna++) {
-        int posicao = linha * JOGO_TAMANHO + coluna + 1;
-        char valor = jogo.casas[linha][coluna];
-
-        if (valor == ' ') {
-            valor = (char)('0' + posicao);
-        }
-
-        if (posicao == posicao_cursor && jogo.casas[linha][coluna] == ' ') {
-            snprintf(celulas[coluna], sizeof(celulas[coluna]), "[%c]", valor);
-        } else {
-            snprintf(celulas[coluna], sizeof(celulas[coluna]), " %c ", valor);
-        }
-    }
-
-    snprintf(saida, tamanho, "%s|%s|%s", celulas[0], celulas[1], celulas[2]);
-}
-
-static void mostrar_tabuleiro_com_cursor(int posicao_cursor)
-{
-    char linha0[16];
-    char linha1[16];
-    char linha2[16];
-
-    formatar_linha_com_cursor(0, posicao_cursor, linha0, sizeof(linha0));
-    formatar_linha_com_cursor(1, posicao_cursor, linha1, sizeof(linha1));
-    formatar_linha_com_cursor(2, posicao_cursor, linha2, sizeof(linha2));
-
-    const char *linhas[] = {
-        "AUTO-SCAN",
-        "GESTO=OK",
-        linha0,
-        linha1,
-        linha2,
-        "1-9 TECLADO",
-        "* LUZ # OFF",
-    };
-
-    ESP_ERROR_CHECK(ssd1306_mostrar_linhas(&oled, linhas, 7));
+    exibir_oled_linhas("TABULEIRO", linhas, 7);
 }
 
 static void mostrar_placar(void)
@@ -326,20 +365,20 @@ static void mostrar_placar(void)
         empates,
     };
 
-    ESP_ERROR_CHECK(ssd1306_mostrar_linhas(&oled, linhas, 6));
+    exibir_oled_linhas("PLACAR", linhas, 6);
 }
 
 static void mostrar_autor(void)
 {
     const char *linhas[] = {
         " ",
+        "  Desenvolvido",
+        "      por:",
         " ",
-        "     Autor",
-        " ",
-        "  Patrik Lima",
+        " Patrik & Janiel",
     };
 
-    ESP_ERROR_CHECK(ssd1306_mostrar_linhas(&oled, linhas, 5));
+    exibir_oled_linhas("AUTOR", linhas, 5);
 }
 
 static void mostrar_placar_zerado(void)
@@ -352,43 +391,50 @@ static void mostrar_placar_zerado(void)
         "     Zerado",
     };
 
-    ESP_ERROR_CHECK(ssd1306_mostrar_linhas(&oled, linhas, 5));
+    exibir_oled_linhas("PLACAR_ZERADO", linhas, 5);
 }
 
 static void mostrar_mensagem(const char *linha1, const char *linha2, const char *linha3)
 {
     const char *linhas[] = {
         " ",
+        " ",
         linha1,
         linha2,
         linha3,
     };
 
-    ESP_ERROR_CHECK(ssd1306_mostrar_linhas(&oled, linhas, 4));
+    exibir_oled_linhas("MENSAGEM", linhas, 5);
+}
+
+static void atualizar_lcd_status_ia(bool forcar)
+{
+    uint32_t agora_ms = ler_millis();
+    if (!forcar && lcd_status_iniciado && (agora_ms - ultimo_lcd_status_ms) < INTERVALO_LCD_AUTORES_MS) {
+        return;
+    }
+
+    char autores[LCD1602_COLUNAS + 1];
+    lcd1602_formatar_janela_scroll(LCD_AUTORES_TEXTO, lcd_autores_passo, autores);
+
+    lcd1602_escrever_linha(&lcd, 0, texto_lcd_algoritmo(NULL)); /* ignora falha I2C */
+    lcd1602_escrever_linha(&lcd, 1, autores); /* ignora falha I2C */
+
+    lcd_autores_passo++;
+    ultimo_lcd_status_ms = agora_ms;
+    lcd_status_iniciado = true;
 }
 
 static void atualizar_lcd_algoritmo(const ia_resultado_t *resultado)
 {
-    char linha[17];
-
-    snprintf(linha, sizeof(linha), "IA %s", resultado->nome_curto);
-    ESP_ERROR_CHECK(lcd1602_escrever_linha(&lcd, 0, "Algoritmo IA"));
-    ESP_ERROR_CHECK(lcd1602_escrever_linha(&lcd, 1, linha));
+    (void)resultado;
+    atualizar_lcd_status_ia(true);
 }
 
-static char aguardar_tecla(void)
+static const char *texto_lcd_algoritmo(const ia_resultado_t *resultado)
 {
-    while (true) {
-        char tecla = teclado_matricial_ler(&teclado);
-
-        if (tecla != 0) {
-            ESP_LOGI(TAG, "Tecla detectada na partida: %c", tecla);
-            buzzer_som_tecla();
-            return tecla;
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(40));
-    }
+    (void)resultado;
+    return "TFLite";
 }
 
 static bool aguardar_jogada_teclado(int *posicao)
@@ -398,15 +444,26 @@ static bool aguardar_jogada_teclado(int *posicao)
     }
 
     while (true) {
-        char tecla = aguardar_tecla();
+        atualizar_lcd_status_ia(false);
+        char tecla = teclado_matricial_ler(&teclado);
+        if (tecla == 0) {
+            leds_atualizar(&leds);
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+
+        ESP_LOGI(TAG, "Tecla detectada na partida: %c", tecla);
+        buzzer_som_tecla();
 
         if (tecla == '*') {
+            luz_dourada_manual = true;
             leds_definir_dourado(&leds, true);
             leds_atualizar(&leds);
             continue;
         }
 
         if (tecla == '#') {
+            luz_dourada_manual = true;
             leds_definir_dourado(&leds, false);
             leds_atualizar(&leds);
             continue;
@@ -419,149 +476,108 @@ static bool aguardar_jogada_teclado(int *posicao)
     }
 }
 
-static bool aguardar_jogada_jogador(int *posicao)
+static void atualizar_presenca_ambiente(void)
 {
-    if (posicao == NULL) {
-        return false;
+    if (!sensor_hcsr04_pronto) {
+        return;
     }
 
-    if (!mpu_pronto) {
-        while (true) {
-            char tecla = aguardar_tecla();
-
-            if (tecla == '*') {
-                leds_definir_dourado(&leds, true);
-                leds_atualizar(&leds);
-                continue;
-            }
-
-            if (tecla == '#') {
-                leds_definir_dourado(&leds, false);
-                leds_atualizar(&leds);
-                continue;
-            }
-
-            if (tecla >= '1' && tecla <= '9') {
-                *posicao = tecla - '0';
-                return true;
-            }
-        }
+    uint32_t agora_ms = ler_millis();
+    if (presenca_log_iniciado && (agora_ms - ultimo_log_presenca_ms) < INTERVALO_PRESENCA_LOG_MS) {
+        return;
     }
 
-    auto_scan_t scan;
-    gesto_detector_t detector;
-    auto_scan_iniciar(&scan, &jogo, ler_millis());
-    gesto_detector_iniciar(&detector);
-    gesto_detector_definir_classificador(&detector, gesto_tflite_classificar, &modelo_gesto);
-
-    if (auto_scan_posicao_atual(&scan) == 0) {
-        return false;
+    uint16_t distancia_cm = 0;
+    uint32_t eco_us = 0;
+    esp_err_t erro = hcsr04_ler_distancia(&sensor_hcsr04, &distancia_cm, &eco_us);
+    if (erro != ESP_OK) {
+        return;
     }
 
-    mostrar_tabuleiro_com_cursor(auto_scan_posicao_atual(&scan));
+    bool presente = presenca_tflite_classificar(&modelo_presenca, distancia_cm, eco_us);
+    ultimo_log_presenca_ms = agora_ms;
 
-    while (true) {
-        uint32_t agora_ms = ler_millis();
-
-        if (auto_scan_atualizar(&scan, &jogo, agora_ms)) {
-            mostrar_tabuleiro_com_cursor(auto_scan_posicao_atual(&scan));
-        }
-
-        char tecla = teclado_matricial_ler(&teclado);
-        if (tecla != 0) {
-            ESP_LOGI(TAG, "Tecla detectada na partida: %c", tecla);
-            buzzer_som_tecla();
-
-            if (tecla == '*') {
-                leds_definir_dourado(&leds, true);
-                leds_atualizar(&leds);
-            } else if (tecla == '#') {
-                leds_definir_dourado(&leds, false);
-                leds_atualizar(&leds);
-            } else if (tecla >= '1' && tecla <= '9') {
-                *posicao = tecla - '0';
-                return true;
-            }
-        }
-
-        int16_t ax = 0;
-        int16_t ay = 0;
-        int16_t az = 0;
-        if (mpu6050_ler_aceleracao(&mpu, &ax, &ay, &az) == ESP_OK) {
-            gesto_evento_t evento = gesto_detector_processar_amostra(&detector, agora_ms, ax, ay, az);
-            if (evento == GESTO_EVENTO_CONFIRMAR) {
-                int posicao_atual = auto_scan_posicao_atual(&scan);
-                if (jogo_posicao_valida(posicao_atual)) {
-                    ESP_LOGI(TAG, "Gesto confirmou a posicao %d", posicao_atual);
-                    buzzer_som_tecla();
-                    *posicao = posicao_atual;
-                    return true;
-                }
-            }
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(COLETA_MPU6050_PERIODO_MS));
+    if (!presenca_log_iniciado || presente != ultima_presenca_logada) {
+        ESP_LOGI(TAG,
+                 "\033[1;36m[Sensor HC-SR04]\033[0m Detectei que voce esta: %s (dist: %u cm | IA_Score: %ld)",
+                 presente ? "\033[1;32mPRESENTE\033[0m" : "\033[1;31mAUSENTE\033[0m",
+                 (unsigned int)distancia_cm,
+                 (long)modelo_presenca.ultimo_score);
+        presenca_log_iniciado = true;
+        ultima_presenca_logada = presente;
     }
 }
 
-static void coletar_dados_mpu6050(void)
+static void atualizar_luz_automatica(void)
 {
-    if (!mpu_pronto) {
-        mostrar_mensagem("MPU6050", "INDISPONIVEL", "TECLADO OK");
+    if (!sensor_luz_pronto || luz_dourada_manual) {
+        return;
+    }
+
+    int leitura = 0;
+    if (ldr_ler_bruto(&sensor_luz, &leitura) != ESP_OK) {
+        return;
+    }
+
+    int limiar_liga = LDR_LIMIAR_ESCURO - 200;
+    int limiar_desliga = LDR_LIMIAR_ESCURO + 200;
+
+    if (ldr_histerese_estado == 0 && leitura < limiar_liga) {
+        ldr_histerese_estado = 1;
+        leds_definir_dourado(&leds, true);
+    } else if (ldr_histerese_estado == 1 && leitura > limiar_desliga) {
+        ldr_histerese_estado = 0;
+        leds_definir_dourado(&leds, false);
+    }
+}
+
+static void coletar_dados_hcsr04(void)
+{
+    if (!sensor_hcsr04_pronto) {
+        mostrar_mensagem("HC-SR04", "INDISPONIVEL", "TECLADO OK");
         vTaskDelay(pdMS_TO_TICKS(1400));
         return;
     }
 
-    coleta_mpu6050_t coleta;
-    TaskHandle_t tarefa_coleta = NULL;
-    coleta_mpu6050_configurar(&coleta, &mpu);
+    int label = COLETA_HCSR04_LABEL_AUSENTE;
+    printf("\n\033[1;33m--- Iniciando Coleta de Dados do HC-SR04 ---\033[0m\n");
+    printf("%s\n", COLETA_HCSR04_CABECALHO_CSV);
+    ESP_LOGI(TAG, "Aperte 0 (Ausente), 1 (Presente) ou D (Sair do modo).");
+    mostrar_menu_coleta_hcsr04(label);
 
-    BaseType_t criada = xTaskCreate(mpu_data_collection_task,
-                                    "mpu_data_collection_task",
-                                    4096,
-                                    &coleta,
-                                    5,
-                                    &tarefa_coleta);
+    while (true) {
+        atualizar_luz_automatica();
+        atualizar_lcd_status_ia(false);
 
-    if (criada != pdPASS) {
-        mostrar_mensagem("COLETA", "FALHOU", "SEM TASK");
-        vTaskDelay(pdMS_TO_TICKS(1400));
-        return;
-    }
-
-    ESP_LOGI(TAG, "Coleta CSV iniciada. Salve o serial a partir do cabecalho: %s", COLETA_MPU6050_CABECALHO_CSV);
-    ESP_LOGI(TAG, "Use 0 para repouso, 1 para confirmar jogada e D para sair da coleta.");
-    mostrar_menu_coleta(coleta.label);
-
-    while (coleta.ativa) {
         char tecla = teclado_matricial_ler(&teclado);
-
         if (tecla != 0) {
             ESP_LOGI(TAG, "Tecla detectada na coleta: %c", tecla);
             buzzer_som_tecla();
         }
 
-        switch (tecla) {
-        case '0':
-            ESP_ERROR_CHECK(coleta_mpu6050_definir_label(&coleta, COLETA_MPU6050_LABEL_REPOUSO));
-            mostrar_menu_coleta(coleta.label);
-            break;
-        case '1':
-            ESP_ERROR_CHECK(coleta_mpu6050_definir_label(&coleta, COLETA_MPU6050_LABEL_CONFIRMAR));
-            mostrar_menu_coleta(coleta.label);
-            break;
-        case 'D':
-            coleta_mpu6050_parar(&coleta);
-            break;
-        default:
-            break;
+        if (tecla == '0') {
+            label = COLETA_HCSR04_LABEL_AUSENTE;
+            mostrar_menu_coleta_hcsr04(label);
+        } else if (tecla == '1') {
+            label = COLETA_HCSR04_LABEL_PRESENTE;
+            mostrar_menu_coleta_hcsr04(label);
+        } else if (tecla == 'D') {
+            ESP_LOGI(TAG, "Coleta HC-SR04 encerrada.");
+            return;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(INTERVALO_MENU_MS));
-    }
+        uint16_t distancia_cm = 0;
+        uint32_t eco_us = 0;
+        if (hcsr04_ler_distancia(&sensor_hcsr04, &distancia_cm, &eco_us) == ESP_OK) {
+            printf("%lu,%u,%lu,%d\n",
+                   (unsigned long)ler_millis(),
+                   (unsigned int)distancia_cm,
+                   (unsigned long)eco_us,
+                   label);
+        }
 
-    vTaskDelay(pdMS_TO_TICKS(COLETA_MPU6050_PERIODO_MS * 2));
-    ESP_LOGI(TAG, "Coleta CSV encerrada.");
+        vTaskDelay(pdMS_TO_TICKS(INTERVALO_COLETA_HCSR04_MS));
+    }
 }
 
 static void jogar_partida(void)
@@ -572,6 +588,7 @@ static void jogar_partida(void)
     mostrar_tabuleiro();
 
     while (true) {
+        atualizar_lcd_status_ia(false);
         if (vez_do_jogador) {
             int posicao = 0;
 
@@ -582,101 +599,69 @@ static void jogar_partida(void)
             if (!jogo_aplicar_posicao(&jogo, posicao, 'O')) {
                 continue;
             }
-
-            mostrar_tabuleiro();
-            if (processar_resultado('O')) {
-                return;
-            }
         } else {
-            ia_resultado_t resultado = ia_escolher_jogada(&jogo);
-            atualizar_lcd_algoritmo(&resultado);
-            vTaskDelay(pdMS_TO_TICKS(350));
-            jogo_aplicar_jogada(&jogo, resultado.jogada, 'X');
-            mostrar_tabuleiro();
+            atualizar_lcd_status_ia(true);
 
-            if (processar_resultado('X')) {
-                return;
-            }
-        }
-
-        vez_do_jogador = !vez_do_jogador;
-    }
-}
-
-static void jogar_partida_com_gesto(void)
-{
-    bool vez_do_jogador = true;
-
-    jogo_resetar_tabuleiro(&jogo);
-    mostrar_tabuleiro();
-
-    while (true) {
-        if (vez_do_jogador) {
-            int posicao = 0;
-
-            if (!aguardar_jogada_jogador(&posicao)) {
-                return;
-            }
-
-            if (!jogo_aplicar_posicao(&jogo, posicao, 'O')) {
-                ESP_ERROR_CHECK(lcd1602_escrever_linha(&lcd, 0, "Casa ocupada"));
-                ESP_ERROR_CHECK(lcd1602_escrever_linha(&lcd, 1, "Tente outra"));
-                continue;
-            }
-
-            mostrar_tabuleiro();
-            if (processar_resultado('O')) {
-                return;
-            }
-        } else {
             ia_resultado_t resultado = ia_tflite_escolher_jogada(&modelo_ia, &jogo);
             atualizar_lcd_algoritmo(&resultado);
-            vTaskDelay(pdMS_TO_TICKS(350));
-            jogo_aplicar_jogada(&jogo, resultado.jogada, 'X');
-            mostrar_tabuleiro();
+            if (modelo_ia.ultimo_indice >= 0) {
+                ESP_LOGI(TAG,
+                         "Inferencia TFLite jogo: posicao=%d score_int8=%d modelo_sha=%.12s",
+                         modelo_ia.ultimo_indice + 1,
+                         (int)modelo_ia.ultimo_score,
+                         TICTACTOE_MODEL_INT8_SHA256);
+            }
 
-            if (processar_resultado('X')) {
+            uint32_t pensamento = (ler_millis() * 7U + 13U) % 400U;
+            vTaskDelay(pdMS_TO_TICKS(pensamento));
+
+            if (!jogo_aplicar_jogada(&jogo, resultado.jogada, 'X')) {
+                ESP_LOGE(TAG, "Modelo TFLite nao retornou uma jogada valida.");
+                mostrar_mensagem("IA TFLite", "INDISPONIVEL", " ");
+                vTaskDelay(pdMS_TO_TICKS(1400));
                 return;
             }
         }
 
-        vez_do_jogador = !vez_do_jogador;
-    }
-}
+        mostrar_tabuleiro();
 
-static bool processar_resultado(char ultimo_jogador)
-{
-    if (jogo_verificar_vitoria(&jogo, ultimo_jogador)) {
-        if (ultimo_jogador == 'O') {
+        if (jogo_verificar_vitoria(&jogo, 'O')) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
             jogo.vitorias_jogador++;
             mostrar_mensagem("     Voce", " ", "    Venceu");
             buzzer_som_vitoria();
-        } else {
-            jogo.vitorias_computador++;
-            mostrar_mensagem("  Computador", "   Venceu", " ");
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            return;
         }
 
-        vTaskDelay(pdMS_TO_TICKS(1600));
-        return true;
-    }
+        if (jogo_verificar_vitoria(&jogo, 'X')) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            jogo.vitorias_computador++;
+            mostrar_mensagem("  Computador", "   Venceu", " ");
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            return;
+        }
 
-    if (jogo_verificar_empate(&jogo)) {
-        jogo.empates++;
-        mostrar_mensagem("     Empate", " ", " ");
-        vTaskDelay(pdMS_TO_TICKS(1600));
-        return true;
-    }
+        if (jogo_verificar_empate(&jogo)) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            jogo.empates++;
+            mostrar_mensagem("     Empate", " ", " ");
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            return;
+        }
 
-    return false;
+        vez_do_jogador = !vez_do_jogador;
+    }
 }
 
 static void parar_programa(void)
 {
-    ESP_ERROR_CHECK(lcd1602_escrever_linha(&lcd, 0, "Programa"));
-    ESP_ERROR_CHECK(lcd1602_escrever_linha(&lcd, 1, "Finalizado"));
+    atualizar_lcd_status_ia(true);
     mostrar_mensagem("Programa", "Finalizado", " ");
 
     while (true) {
+        atualizar_lcd_status_ia(false);
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }

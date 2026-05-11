@@ -1,6 +1,7 @@
 #include "lcd1602_i2c.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include "esp_check.h"
 #include "esp_rom_sys.h"
@@ -11,6 +12,7 @@
 #define LCD_LUZ_FUNDO 0x08
 #define LCD_ATIVAR 0x04
 #define LCD_REGISTRO_DADOS 0x01
+#define LCD_SCROLL_ESPACOS 4
 
 static const char *TAG_LCD = "lcd1602";
 
@@ -67,11 +69,34 @@ esp_err_t lcd1602_escrever_linha(lcd1602_t *lcd, uint8_t linha, const char *text
     snprintf(texto_com_16_colunas, sizeof(texto_com_16_colunas), "%-16.16s", texto);
     ESP_RETURN_ON_ERROR(lcd_posicionar_cursor(lcd, 0, linha), TAG_LCD, "falha ao posicionar cursor");
 
-    for (int coluna = 0; coluna < 16; coluna++) {
+    for (int coluna = 0; coluna < LCD1602_COLUNAS; coluna++) {
         ESP_RETURN_ON_ERROR(lcd_escrever_caractere(lcd, texto_com_16_colunas[coluna]), TAG_LCD, "falha ao escrever caractere");
     }
 
     return ESP_OK;
+}
+
+void lcd1602_formatar_janela_scroll(const char *texto, uint32_t passo, char saida[LCD1602_COLUNAS + 1])
+{
+    const char *conteudo = texto != NULL ? texto : "";
+    size_t tamanho = strlen(conteudo);
+
+    if (saida == NULL) {
+        return;
+    }
+
+    if (tamanho == 0) {
+        memset(saida, ' ', LCD1602_COLUNAS);
+        saida[LCD1602_COLUNAS] = '\0';
+        return;
+    }
+
+    size_t periodo = tamanho + LCD_SCROLL_ESPACOS;
+    for (size_t coluna = 0; coluna < LCD1602_COLUNAS; coluna++) {
+        size_t indice = (passo + coluna) % periodo;
+        saida[coluna] = indice < tamanho ? conteudo[indice] : ' ';
+    }
+    saida[LCD1602_COLUNAS] = '\0';
 }
 
 static esp_err_t lcd_enviar_byte(lcd1602_t *lcd, uint8_t byte)
@@ -130,4 +155,3 @@ static esp_err_t lcd_posicionar_cursor(lcd1602_t *lcd, uint8_t coluna, uint8_t l
 
     return lcd_comando(lcd, 0x80 | (uint8_t)(coluna + inicio_linhas[linha]));
 }
-

@@ -95,19 +95,26 @@
       "attrs": { "i2cAddress": "0x3c" }
     },
     {
-      "type": "wokwi-mpu6050",
-      "id": "mpu1",
-      "top": 77.78,
-      "left": -170.48,
-      "attrs": {}
+      "type": "wokwi-hc-sr04",
+      "id": "ultra1",
+      "top": 90,
+      "left": -186,
+      "attrs": { "distance": "75" }
+    },
+    {
+      "type": "wokwi-photoresistor-sensor",
+      "id": "ldr1",
+      "top": 235,
+      "left": -198,
+      "attrs": { "lux": "320" }
     },
     {
       "type": "wokwi-text",
-      "id": "text_mpu1",
-      "top": 148.8,
-      "left": -272.4,
+      "id": "text_sensores",
+      "top": 177.6,
+      "left": -326.4,
       "attrs": {
-        "text": "MPU6050\nsensor de gesto\nI2C 0x68"
+        "text": "HC-SR04: classificador TFLite e coleta CSV opcional\nLDR: luz automatica dos LEDs"
       }
     },
     {
@@ -123,7 +130,7 @@
       "top": -220.8,
       "left": 220.8,
       "attrs": {
-        "text": "Mostra o algoritmo de IA executado\npela jogada do computador."
+        "text": "Mostra somente TFLite,\no unico algoritmo de IA."
       }
     },
     {
@@ -184,10 +191,13 @@
     [ "oled1:GND", "gnd2:GND", "black", [ "h-19.2", "v-76.8", "h-211.2" ] ],
     [ "oled1:SDA", "esp:14", "yellow", [ "v-28.8", "h201.67", "v124.76" ] ],
     [ "esp:15", "oled1:SCL", "magenta", [ "h-38.4", "v86.44", "h-537.6", "v-211.2", "h114.9" ] ],
-    [ "esp:3V3", "mpu1:VCC", "red", [ "h144", "v518.4", "h-854.4", "v-374.4" ] ],
-    [ "mpu1:GND", "gnd2:GND", "black", [ "h-38.4", "v182.4", "h-153.6" ] ],
-    [ "mpu1:SDA", "esp:14", "yellow", [ "h172.8", "v-9.6", "h297.6", "v57.6" ] ],
-    [ "esp:15", "mpu1:SCL", "magenta", [ "h-28.8", "v96", "h-508.8", "v-19.2" ] ],
+    [ "ultra1:VCC", "esp:3V3", "red", [ "h86.4", "v-230.4", "h470.4" ] ],
+    [ "ultra1:GND", "gnd2:GND", "black", [ "h-57.6", "v249.6" ] ],
+    [ "ultra1:TRIG", "esp:19", "orange", [ "h201.6", "v-48", "h345.6", "v-115.2" ] ],
+    [ "ultra1:ECHO", "esp:20", "cyan", [ "h220.8", "v-28.8", "h345.6", "v-144" ] ],
+    [ "ldr1:VCC", "esp:3V3", "red", [ "h105.6", "v-412.8", "h566.4" ] ],
+    [ "ldr1:GND", "gnd2:GND", "black", [ "h-76.8", "v96" ] ],
+    [ "ldr1:AO", "esp:10", "purple", [ "h297.6", "v-230.4", "h230.4", "v-76.8" ] ],
     [ "lcd1:VCC", "esp:3V3", "red", [ "h9.6", "v-57.5", "h316.8", "v355.2", "h-173.11" ] ],
     [ "lcd1:GND", "gnd2:GND", "black", [ "h-38.4", "v-86.4", "h480", "v211.2" ] ],
     [ "lcd1:SDA", "esp:16", "green", [ "h-19.2", "v-86.2", "h336", "v499.2" ] ],

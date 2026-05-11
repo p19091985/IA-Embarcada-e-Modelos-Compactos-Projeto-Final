@@ -16,8 +16,9 @@ def test_diagram_uses_expected_esp32s3_parts():
     assert parts["esp"]["type"] == "board-esp32-s3-devkitc-1"
     assert parts["keypad1"]["type"] == "wokwi-membrane-keypad"
     assert parts["oled1"]["type"] == "board-ssd1306"
-    assert parts["mpu1"]["type"] == "wokwi-mpu6050"
     assert parts["lcd1"]["type"] == "wokwi-lcd1602"
+    assert parts["ultra1"]["type"] == "wokwi-hc-sr04"
+    assert parts["ldr1"]["type"] == "wokwi-photoresistor-sensor"
 
     for led_id in ["led2", "led3", "led4", "led5", "led6", "led7"]:
         assert parts[led_id]["type"] == "wokwi-led"
@@ -26,6 +27,7 @@ def test_diagram_uses_expected_esp32s3_parts():
         assert parts[buzzer_id]["type"] == "wokwi-buzzer"
 
     assert "dht1" not in parts
+    assert "mpu1" not in parts
 
 
 def test_gpio_mapping_matches_hardware_plan():
@@ -43,34 +45,33 @@ def test_gpio_mapping_matches_hardware_plan():
         ("keypad1:C2", "esp:7"),
         ("keypad1:C3", "esp:8"),
         ("keypad1:C4", "esp:9"),
+        ("ldr1:AO", "esp:10"),
         ("led2:A", "esp:11"),
         ("led3:A", "esp:12"),
         ("led7:A", "esp:13"),
         ("oled1:SDA", "esp:14"),
         ("oled1:SCL", "esp:15"),
-        ("mpu1:SDA", "esp:14"),
-        ("mpu1:SCL", "esp:15"),
         ("lcd1:SDA", "esp:16"),
         ("lcd1:SCL", "esp:17"),
         ("bz4:2", "esp:18"),
+        ("ultra1:TRIG", "esp:19"),
+        ("ultra1:ECHO", "esp:20"),
     }
 
     assert expected <= all_connections
 
 
-def test_mpu6050_is_powered_and_shares_oled_i2c_bus():
+def test_sensores_sao_alimentados():
     diagram = load_diagram()
     connections = {(left, right) for left, right, *_ in diagram["connections"]}
     reverse = {(right, left) for left, right, *_ in diagram["connections"]}
     all_connections = connections | reverse
 
     expected = {
-        ("mpu1:VCC", "esp:3V3"),
-        ("mpu1:GND", "gnd2:GND"),
-        ("mpu1:SDA", "esp:14"),
-        ("mpu1:SCL", "esp:15"),
-        ("oled1:SDA", "esp:14"),
-        ("oled1:SCL", "esp:15"),
+        ("ultra1:VCC", "esp:3V3"),
+        ("ultra1:GND", "gnd2:GND"),
+        ("ldr1:VCC", "esp:3V3"),
+        ("ldr1:GND", "gnd2:GND"),
     }
 
     assert expected <= all_connections

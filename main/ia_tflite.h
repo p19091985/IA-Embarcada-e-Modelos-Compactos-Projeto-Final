@@ -11,6 +11,8 @@ typedef struct {
     bool pronto;
     bool forcar_falha;
     int arena_bytes;
+    int ultimo_indice;
+    int8_t ultimo_score;
 } ia_tflite_t;
 
 #ifdef __cplusplus

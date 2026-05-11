@@ -2,36 +2,28 @@
 
 Esta pasta armazena os CSVs utilizados pelas pipelines de treinamento.
 
-## Gestos (MPU6050)
+As pipelines completas gravam relatorios em `ml/relatorios/` com auditoria dos datasets, split treino/teste, matriz de confusao, amostras representativas usadas na quantizacao e ligacao com os requisitos do PDF do projeto final.
 
-Formato do CSV bruto produzido pelo firmware no modo de coleta (tecla `9`):
+## Presenca (HC-SR04)
 
-```text
-timestamp_ms,ax,ay,az,label
-```
-
-Labels utilizados:
-
-- `0`: repouso ou movimento normal.
-- `1`: gesto de confirmacao de jogada.
-
-O CSV bruto e transformado em janelas deslizantes pela pipeline `ml/pipeline_gestos.py`, gerando o arquivo `gestos_janelas.csv` com 48 features por janela (16 amostras x 3 eixos).
-
-Procedimento de coleta:
-
-1. Iniciar o firmware no simulador Wokwi.
-2. Pressionar `9` no menu para ativar o modo de coleta.
-3. Capturar a saida serial a partir do cabecalho CSV.
-4. Tecla `0` define label repouso; tecla `1` define label confirmacao.
-5. Tecla `D` encerra a coleta.
-
-Pipeline completa:
+O dataset do classificador de presenca usa leituras do sensor ultrassonico:
 
 ```bash
-python3 ml/pipeline_gestos.py --raw ml/datasets/gestos_raw.csv
+python3 ml/pipeline_presenca.py --sem-treino
 ```
 
-Quando o CSV bruto nao esta disponivel, o parametro `--gerar-exemplo` produz dados por modelagem algoritmica para validacao da pipeline.
+Arquivo gerado: `presenca_hcsr04.csv`.
+
+Formato:
+
+```text
+distancia_cm,eco_us,label
+```
+
+Mapeamento:
+
+- `0`: jogador ausente/distante.
+- `1`: jogador presente/proximo.
 
 ## Jogo da Velha
 
@@ -54,4 +46,4 @@ Mapeamento:
 - `1`: computador (`X` no firmware).
 - `-1`: jogador (`O` no firmware).
 - `0`: casa vazia.
-- `best_move`: indice `0..8` da melhor casa para o computador.
+- `best_move`: indice `0..8` de uma melhor casa para o computador. Durante o treino, a pipeline tambem cria uma politica multi-alvo com todas as jogadas minimax otimas para nao penalizar empates entre jogadas igualmente corretas.

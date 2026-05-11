@@ -128,7 +128,7 @@ goto :fim
 :menu
 cls
 echo ------------------------------------------------------------
-echo   IA Embarcada - Jogo da Velha ESP32-S3
+echo   === Painel de Controle: Jogo da Velha (Patrik ^& Janiel) ===
 echo ------------------------------------------------------------
 echo   1) Compilar firmware principal
 echo   2) Limpar tudo e compilar firmware
@@ -384,26 +384,24 @@ exit /b 0
 :mostrar_checklist
 echo.
 echo ------------------------------------------------------------
-echo   Validacao manual no Wokwi
+echo   === Validacao Manual no Wokwi (Checklist) ===
 echo ------------------------------------------------------------
-echo   No VS Code, execute: Wokwi: Start Simulator
+echo   Fala pessoal! No VS Code, execute: Wokwi: Start Simulator
 echo.
-echo   Checklist:
+echo   Checklist de testes:
 echo     [ ] OLED exibe o menu principal
 echo     [ ] Tecla A inicia a partida por teclado
 echo     [ ] Tabuleiro exibe formato com ---+---+---
 echo     [ ] Teclas 1 a 9 selecionam posicoes no tabuleiro
 echo     [ ] Tecla B exibe o placar
-echo     [ ] Tecla D exibe o autor
-echo     [ ] LCD1602 exibe o algoritmo de IA utilizado
+echo     [ ] Tecla D exibe Janiel e Patrik no About
+echo     [ ] LCD1602 exibe TFLite na linha 1 e autores rolando na linha 2
 echo     [ ] Tecla * liga o LED dourado
 echo     [ ] Tecla # desliga o LED dourado
-echo     [ ] Tecla 8 inicia o modo gesto/auto-scan
-echo     [ ] No modo 8, gesto confirma a casa destacada
-echo     [ ] Tecla 9 ativa o modo de coleta do MPU6050
-echo     [ ] Serial exibe timestamp_ms,ax,ay,az,label a 50 Hz
-echo     [ ] Na coleta, 0 define label repouso e 1 define label confirmacao
-echo     [ ] Na coleta, D encerra e retorna ao menu
+echo     [ ] LDR liga automaticamente o LED dourado no escuro
+echo     [ ] Serial registra inferencia de presenca do HC-SR04
+echo     [ ] Tecla 9 ativa a coleta CSV opcional do HC-SR04
+echo     [ ] Serial exibe timestamp_ms,distancia_cm,eco_us,label
 echo     [ ] Buzzer toca nas teclas, inicializacao e vitoria
 echo     [ ] Partida encerra com vitoria do jogador
 echo     [ ] Partida encerra com vitoria do computador
@@ -489,7 +487,7 @@ popd
 if "%RODAR_TESTES%"=="1" (
     echo ==^> Rodando testes Python...
     pushd "%PASTA%"
-    "%PYTHON_BIN%" -m pytest test\test_diagram_json.py test\test_pipeline_tictactoe.py test\test_pipeline_gestos.py
+    "%PYTHON_BIN%" -m pytest test\test_diagram_json.py test\test_pipeline_tictactoe.py test\test_pipeline_presenca.py test\test_requisitos_sistema.py
     popd
 )
 

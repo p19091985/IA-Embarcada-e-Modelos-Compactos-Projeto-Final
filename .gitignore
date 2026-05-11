@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .venv/
+.venv-tf/
 codigo/
 .vscode
 .codex
@@ -11,6 +12,9 @@ codigo/
 docs/projeto.md
 docs/resumo.md
 docs/
+logs/
+
+*.log
 *.o
 codigo-ET/
 *.ko

@@ -5,10 +5,16 @@ Esta pasta contem os testes automatizados do jogo da velha embarcado para ESP32-
 Arquivos:
 
 - `test_diagram_json.py`: teste de host para conferir se o `diagram.json` tem os componentes e GPIOs esperados.
+- `test_pipeline_tictactoe.py`: testes da geracao de dataset, politica otima, header e relatorio de treino do modelo do jogo.
+- `test_pipeline_presenca.py`: testes do dataset HC-SR04, header e relatorio de treino do classificador de presenca.
+- `test_requisitos_sistema.py`: testes de rastreabilidade entre PDF, notebook, firmware, modelos e documentacao.
 - `test_jogo_da_velha.c`: testes Unity para a logica do tabuleiro.
-- `test_ia_jogo_da_velha.c`: testes Unity para a IA.
+- `test_ia_tflite.c`: testes Unity para a unica IA ativa no firmware.
 - `test_teclado_matricial.c`: testes Unity para o mapa do teclado.
 - `test_formatacao_telas.c`: testes Unity para os textos de tela.
+- `test_hcsr04.c`: testes Unity para conversao e faixa do sensor ultrassonico.
+- `test_ldr.c`: testes Unity para limiar de luminosidade.
+- `test_presenca_tflite.c`: testes Unity para o classificador TFLite de presenca.
 - `main/test_runner.c`: runner Unity embarcado que chama os testes C.
 
 O teste Python pode ser executado com:

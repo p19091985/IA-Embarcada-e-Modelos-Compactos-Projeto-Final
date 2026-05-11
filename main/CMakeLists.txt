@@ -8,13 +8,10 @@ idf_component_register(
         "buzzer.c"
         "ssd1306_i2c.c"
         "lcd1602_i2c.c"
-        "mpu6050.c"
-        "coleta_mpu6050.c"
-        "serie_temporal.c"
-        "gesto.c"
-        "gesto_tflite.cc"
-        "auto_scan.c"
+        "hcsr04.c"
+        "ldr.c"
         "ia_tflite.cc"
+        "presenca_tflite.cc"
     INCLUDE_DIRS "."
-    REQUIRES esp_driver_gpio esp_driver_i2c esp_driver_ledc esp_rom esp_timer esp-tflite-micro
+    REQUIRES esp_adc esp_driver_gpio esp_driver_i2c esp_driver_ledc esp_rom esp_timer esp-tflite-micro
 )

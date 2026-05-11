@@ -15,19 +15,6 @@ static bool casa_livre(const jogo_estado_t *jogo, int indice)
     return jogo->casas[indice / JOGO_TAMANHO][indice % JOGO_TAMANHO] == ' ';
 }
 
-static bool jogada_vence(const jogo_estado_t *jogo, int indice, char jogador)
-{
-    char tabuleiro[JOGO_TAMANHO][JOGO_TAMANHO];
-
-    if (!casa_livre(jogo, indice)) {
-        return false;
-    }
-
-    memcpy(tabuleiro, jogo->casas, sizeof(tabuleiro));
-    tabuleiro[indice / JOGO_TAMANHO][indice % JOGO_TAMANHO] = jogador;
-    return jogo_verificar_vitoria_tabuleiro((const char (*)[JOGO_TAMANHO])tabuleiro, jogador);
-}
-
 static int8_t limitar_score(int valor)
 {
     if (valor > 127) {
@@ -130,13 +117,16 @@ esp_err_t iniciar_runtime_tflite()
 }
 } // namespace
 
-static ia_resultado_t resultado_fallback(jogo_estado_t *jogo)
+static ia_resultado_t resultado_invalido(void)
 {
-    ia_resultado_t fallback = ia_escolher_jogada(jogo);
-
-    fallback.algoritmo = IA_MINIMAX_FALLBACK;
-    fallback.nome_curto = ia_nome(fallback.algoritmo);
-    return fallback;
+    return (ia_resultado_t) {
+        .jogada = {
+            .linha = -1,
+            .coluna = -1,
+        },
+        .algoritmo = IA_TFLITE,
+        .nome_curto = ia_nome(IA_TFLITE),
+    };
 }
 
 esp_err_t ia_tflite_iniciar(ia_tflite_t *ia)
@@ -147,6 +137,8 @@ esp_err_t ia_tflite_iniciar(ia_tflite_t *ia)
 
     memset(ia, 0, sizeof(*ia));
     ia->arena_bytes = TICTACTOE_MODEL_TENSOR_ARENA_BYTES;
+    ia->ultimo_indice = -1;
+    ia->ultimo_score = -128;
 
     esp_err_t erro = iniciar_runtime_tflite();
     if (erro != ESP_OK) {
@@ -212,14 +204,7 @@ esp_err_t ia_tflite_inferir_scores(ia_tflite_t *ia, const jogo_estado_t *jogo, i
             continue;
         }
 
-        int score = saida_tflite->data.int8[i] + (TICTACTOE_MODELO_PRIORIDADES[i] / 8);
-        if (jogada_vence(jogo, i, 'X')) {
-            score = 127;
-        } else if (jogada_vence(jogo, i, 'O')) {
-            score = score < 120 ? 120 : score;
-        }
-
-        scores[i] = limitar_score(score);
+        scores[i] = saida_tflite->data.int8[i];
     }
 
     return ESP_OK;
@@ -254,12 +239,25 @@ ia_resultado_t ia_tflite_escolher_jogada(ia_tflite_t *ia, jogo_estado_t *jogo)
     int indice = -1;
 
     if (ia_tflite_inferir_scores(ia, jogo, scores) != ESP_OK) {
-        return resultado_fallback(jogo);
+        if (ia != NULL) {
+            ia->ultimo_indice = -1;
+            ia->ultimo_score = -128;
+        }
+        return resultado_invalido();
     }
 
     indice = ia_tflite_escolher_indice_com_mascara(scores, jogo);
     if (indice < 0) {
-        return resultado_fallback(jogo);
+        if (ia != NULL) {
+            ia->ultimo_indice = -1;
+            ia->ultimo_score = -128;
+        }
+        return resultado_invalido();
+    }
+
+    if (ia != NULL) {
+        ia->ultimo_indice = indice;
+        ia->ultimo_score = scores[indice];
     }
 
     return (ia_resultado_t) {

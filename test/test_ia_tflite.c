@@ -1,5 +1,7 @@
 #include "unity.h"
 
+#include <string.h>
+
 #include "ia_tflite.h"
 
 void test_ia_tflite_converte_tabuleiro_para_vetor(void)
@@ -33,7 +35,7 @@ void test_ia_tflite_mascara_casas_ocupadas(void)
     TEST_ASSERT_EQUAL_INT(1, ia_tflite_escolher_indice_com_mascara(scores, &jogo));
 }
 
-void test_ia_tflite_fallback_quando_inferencia_falha(void)
+void test_ia_tflite_nao_usa_fallback_quando_inferencia_falha(void)
 {
     jogo_estado_t jogo;
     ia_tflite_t ia;
@@ -48,9 +50,9 @@ void test_ia_tflite_fallback_quando_inferencia_falha(void)
     ia_tflite_forcar_falha(&ia, true);
     resultado = ia_tflite_escolher_jogada(&ia, &jogo);
 
-    TEST_ASSERT_EQUAL(IA_MINIMAX_FALLBACK, resultado.algoritmo);
-    TEST_ASSERT_EQUAL_INT(0, resultado.jogada.linha);
-    TEST_ASSERT_EQUAL_INT(2, resultado.jogada.coluna);
+    TEST_ASSERT_EQUAL(IA_TFLITE, resultado.algoritmo);
+    TEST_ASSERT_EQUAL_INT(-1, resultado.jogada.linha);
+    TEST_ASSERT_EQUAL_INT(-1, resultado.jogada.coluna);
 }
 
 void test_ia_tflite_prefere_vitoria_imediata(void)
@@ -70,4 +72,13 @@ void test_ia_tflite_prefere_vitoria_imediata(void)
     TEST_ASSERT_EQUAL(IA_TFLITE, resultado.algoritmo);
     TEST_ASSERT_EQUAL_INT(0, resultado.jogada.linha);
     TEST_ASSERT_EQUAL_INT(2, resultado.jogada.coluna);
+}
+
+void test_ia_tflite_header_tem_metadados_de_treinamento(void)
+{
+    TEST_ASSERT_GREATER_THAN_INT(1000, TICTACTOE_MODEL_DATASET_ROWS);
+    TEST_ASSERT_EQUAL_STRING("full_integer_int8", TICTACTOE_MODEL_QUANTIZATION);
+    TEST_ASSERT_EQUAL_STRING("codigo/tflite_hello_world_training.ipynb", TICTACTOE_MODEL_NOTEBOOK);
+    TEST_ASSERT_EQUAL_INT(64, strlen(TICTACTOE_MODEL_INT8_SHA256));
+    TEST_ASSERT_GREATER_THAN_INT(9000, TICTACTOE_MODEL_OPTIMAL_MOVE_PERMYRIAD);
 }

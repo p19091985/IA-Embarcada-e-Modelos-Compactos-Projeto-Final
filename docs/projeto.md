@@ -2,39 +2,42 @@
 
 ## Visao geral
 
-Este projeto implementa um sistema de jogo da velha embarcado no microcontrolador ESP32-S3 utilizando o framework ESP-IDF. A interface combina teclado matricial 4x4, display OLED SSD1306, LCD1602 I2C, LEDs indicativos e buzzer sonoro. O acelerometro MPU6050 possibilita tanto a coleta de dados para treinamento de modelos quanto a interacao por gestos durante a partida.
+Este projeto implementa um jogo da velha embarcado no ESP32-S3 com ESP-IDF. A experiencia do usuario segue o jogo legado `EmuladorDeSerHumanoNoJogoDaVelhaByPatrikLimaPereira-Alpha0`: o jogador usa o teclado matricial, o OLED exibe menu/tabuleiro/placar/mensagens e o LCD1602 mostra o unico algoritmo de IA usado pelo computador na linha 1.
 
-O jogador seleciona posicoes pelo teclado ou por gesto, enquanto o computador responde utilizando inferencia TFLite Micro em modelos INT8 quantizados, com fallback automatico para minimax deterministico quando a inferencia nao esta disponivel.
+A camada de IA embarcada foi mantida sem mudar o fluxo visual do jogo: o computador usa somente um modelo TFLite Micro INT8 para escolher jogadas, enquanto o HC-SR04 alimenta um classificador TFLite de presenca executado em segundo plano. O modo tecnico escondido na tecla `9` coleta CSV bruto para evoluir o dataset proprio.
+
+No boot, o console mostra uma abertura no estilo TensorFlow Lite Micro Hello World com o fluxo de treino, hashes, datasets, metricas INT8 e metadados das AIs embarcadas. Todas as telas do OLED tambem sao espelhadas no console por blocos `[OLED:...]`, para que a interface possa ser acompanhada pelo monitor serial mesmo quando o display do Wokwi nao estiver em foco.
 
 ## Funcionalidades
 
-- Menu principal e tabuleiro 3x3 exibidos no OLED SSD1306.
-- Entrada por teclado matricial 4x4 para controle do menu e selecao de posicoes.
-- Modo de gesto com auto-scan via MPU6050, mantendo o teclado como fallback paralelo.
-- Modelos TinyML INT8 para selecao da jogada do computador e classificacao de gestos.
-- Fallback automatico para minimax (jogada) e heuristica por limiares (gesto) em caso de falha.
-- LCD1602 exibindo o algoritmo de IA utilizado em cada jogada do computador.
+- Menu principal no OLED igual ao legado: `A - Jogar`, `B - Placar`, `C - Sair`, `D - About`, `0 - Zerar`, `Escolha`.
+- Entrada por teclado matricial 4x4 para menu e selecao de posicoes.
+- Tabuleiro 3x3 no OLED com o formato ` 1 | 2 | 3 ` e separadores `---+---+---`.
+- Modelo TFLite Micro INT8 como unico algoritmo de IA do computador.
+- Relatorios JSON de treino em `ml/relatorios/` com matriz de confusao, contrato INT8, hashes e rastreabilidade do PDF.
+- LCD1602 com linha 1 exibindo `TFLite` e linha 2 rolando `Autores : Janiel e Patrik`.
 - Placar acumulado de vitorias do jogador, vitorias do computador e empates.
-- LED dourado controlado por teclado.
-- Buzzer para eventos de tecla, inicializacao e vitoria.
-- Coleta de dados do MPU6050 a 50 Hz em formato CSV via serial.
+- LED dourado controlado por `*` e `#`, com apoio automatico do LDR enquanto nao houver comando manual.
+- Buzzer para tecla, inicializacao e vitoria.
+- HC-SR04 com classificador TFLite de presenca e coleta CSV bruta em modo tecnico.
+- Console serial com abertura Hello World/TinyML e espelho completo das telas OLED.
 
 ## Controles
 
 | Tecla | Funcao |
 | --- | --- |
-| `A` | Iniciar partida por teclado |
+| `A` | Iniciar partida |
 | `B` | Exibir placar |
 | `C` | Encerrar programa |
-| `D` | Exibir autor |
+| `D` | Exibir About com `Janiel e Patrik` |
 | `0` | Zerar placar |
 | `1` a `9` | Selecionar posicao no tabuleiro |
-| `8` | Iniciar partida com gesto e auto-scan |
-| `9` | Ativar coleta CSV do MPU6050 |
 | `*` | Ligar LED dourado |
 | `#` | Desligar LED dourado |
 
-Na partida por teclado, o OLED desenha o tabuleiro com o formato ` 1 | 2 | 3 ` e separadores `---+---+---`, e o jogador indica a posicao desejada pelas teclas `1` a `9`.
+Modo tecnico: no menu principal, a tecla `9` ativa a coleta CSV bruta do HC-SR04 para diagnostico. Essa opcao nao aparece no menu do OLED para preservar a experiencia do Alpha0.
+
+O About no OLED identifica os autores como `Janiel e Patrik`. No LCD1602, a linha 1 permanece dedicada ao algoritmo de IA atual e a linha 2 rola `Autores : Janiel e Patrik` para a esquerda, em efeito de marquee.
 
 ## Hardware
 
@@ -46,48 +49,22 @@ Na partida por teclado, o OLED desenha o tabuleiro com o formato ` 1 | 2 | 3 ` e
 | LED verde | A | 12 |
 | LEDs dourados | A | 13 |
 | OLED SSD1306 | SDA, SCL | 14, 15 |
-| MPU6050 | SDA, SCL | 14, 15 |
 | LCD1602 I2C | SDA, SCL | 16, 17 |
 | Buzzers | Sinal | 18 |
-
-### Barramentos I2C
-
-| Barramento | Uso | Pinos | Frequencia |
-| --- | --- | --- | --- |
-| `I2C_NUM_0` | OLED SSD1306 e MPU6050 | SDA GPIO14, SCL GPIO15 | 400 kHz |
-| `I2C_NUM_1` | LCD1602 | SDA GPIO16, SCL GPIO17 | 100 kHz |
-
-## Acelerometro MPU6050
-
-O acelerometro MPU6050 compartilha o barramento I2C_NUM_0 com o OLED SSD1306, utilizando o endereco `0x68`. O driver implementado em `main/mpu6050.c` efetua a inicializacao do sensor atraves da escrita no registrador `PWR_MGMT_1` e realiza leituras dos 6 bytes de aceleracao a partir do registrador `ACCEL_XOUT_H` (`0x3B`), convertendo-os para `int16_t` nos tres eixos (ax, ay, az).
-
-### Fluxo de utilizacao
-
-1. **Inicializacao**: a funcao `mpu6050_iniciar()` registra o dispositivo no barramento e acorda o sensor. Se houver falha, o firmware exibe aviso no OLED e prossegue normalmente pelo teclado.
-2. **Leitura**: `mpu6050_ler_aceleracao()` retorna os valores brutos dos tres eixos, onde ±16384 equivale a aproximadamente 1g na faixa padrao de ±2g.
-3. **Coleta CSV**: a tecla `9` inicia a task `mpu_data_collection_task` a 50 Hz (20 ms entre leituras), imprimindo no serial o cabecalho `timestamp_ms,ax,ay,az,label`. As teclas `0` e `1` definem o label durante a coleta e `D` encerra.
-4. **Gesto**: a tecla `8` ativa a partida com auto-scan, onde a funcao `gesto_tflite_classificar()` analisa janelas de 16 amostras da serie temporal e gera eventos de confirmacao quando detecta o padrao treinado.
-
-Caso o sensor nao responda, o sistema permanece funcional em todos os modos que nao dependem do acelerometro.
+| HC-SR04 | TRIG, ECHO | 19, 20 |
+| LDR | AO | 10 |
 
 ## Arquitetura do firmware
 
-Todo o firmware da aplicacao reside no diretorio `main/`.
-
 | Arquivo | Responsabilidade |
 | --- | --- |
-| `main/main.c` | Inicializacao, menu e fluxo das partidas |
+| `main/main.c` | Inicializacao, menu legado, fluxo das partidas e modo tecnico de coleta |
 | `main/jogo_da_velha.*` | Regras, tabuleiro, deteccao de vitoria e empate, placar |
-| `main/ia_jogo_da_velha.*` | Minimax e selecao do algoritmo de jogada do computador |
-| `main/ia_tflite.*` | Inferencia TFLite Micro INT8, mascara de casas ocupadas e fallback minimax |
-| `main/mpu6050.*` | Driver I2C do acelerometro MPU6050 |
-| `main/serie_temporal.*` | Buffer circular e extracao de features das leituras do sensor |
-| `main/gesto.*` | Heuristica de deteccao de gesto com limiar e debounce |
-| `main/gesto_tflite.*` | Inferencia TFLite Micro INT8 para classificacao do gesto |
-| `main/coleta_mpu6050.*` | Task FreeRTOS de coleta CSV a 50 Hz |
-| `main/auto_scan.*` | Cursor automatico que percorre casas livres no OLED |
-| `ml/pipeline_gestos.py` | Geracao de janelas, treinamento, quantizacao INT8 e exportacao do modelo de gestos |
-| `ml/pipeline_tictactoe.py` | Dataset por minimax, treinamento, quantizacao INT8 e exportacao do modelo do jogo |
+| `main/ia_jogo_da_velha.*` | Enum e nome do unico algoritmo exibido: TFLite |
+| `main/ia_tflite.*` | Inferencia TFLite Micro INT8 e mascara de casas ocupadas |
+| `main/hcsr04.*` | Driver do sensor ultrassonico |
+| `main/presenca_tflite.*` | Classificador TFLite de presenca |
+| `main/ldr.*` | Leitura ADC do sensor de luminosidade |
 | `main/teclado_matricial.*` | Leitura do teclado 4x4 |
 | `main/leds.*` | Controle dos LEDs |
 | `main/buzzer.*` | Sons via LEDC |
@@ -96,43 +73,24 @@ Todo o firmware da aplicacao reside no diretorio `main/`.
 
 ## Pipeline de IA
 
-O projeto implementa duas pipelines de TinyML:
+O projeto usa duas pipelines de IA, cobrindo coleta de dados de sensor, treinamento, conversao e compressao e pipeline de inferencia no dispositivo:
 
-**Modelo de gestos (MPU6050)**: o CSV bruto coletado pelo firmware e transformado em janelas deslizantes de 16 amostras com 3 eixos (48 features), rotuladas como repouso (0) ou confirmacao (1). Uma rede densa binaria e treinada com Keras, convertida para TFLite float e quantizada para INT8 com dataset representativo. O modelo final e exportado como array C em `main/gesto_model_data.h` e executado pelo interpretador TFLite Micro no ESP32-S3.
+- **Modelo do jogo da velha**: `ml/pipeline_tictactoe.py` segue o fluxo do notebook `codigo/tflite_hello_world_training.ipynb`: gera dados, treina uma MLP com politica multi-alvo de jogadas minimax otimas, converte para TFLite, quantiza para INT8 e exporta o header do firmware. O minimax aparece apenas no treino offline para rotular/avaliar as melhores jogadas.
+- **Classificador de presenca**: `ml/pipeline_presenca.py` usa `distancia_cm` e `eco_us` do HC-SR04, treina o limiar/modelo com dataset proprio, converte/comprime para TFLite INT8 e exporta `main/presenca_model_data.h` para inferencia embarcada em segundo plano.
 
-**Modelo do jogo da velha**: um dataset e gerado programaticamente atraves do algoritmo minimax, enumerando todos os estados legais do tabuleiro em que e a vez do computador e registrando a melhor jogada como label. Uma MLP com duas camadas de 32 neuronios e treinada para aproximar essa funcao de decisao, passando pelo mesmo fluxo de conversao e quantizacao INT8. Na inferencia embarcada, casas ocupadas sao mascaradas na saida para garantir jogadas validas.
-
-## Compilacao e simulacao
-
-```bash
-./iniciar.sh
-./iniciar.sh build
-./iniciar.sh validar
-./iniciar.sh simular
-```
-
-Para simular, execute `./iniciar.sh simular` e, no VS Code, rode o comando `Wokwi: Start Simulator`.
-
-## Testes
-
-O projeto possui testes de host e um app Unity/ESP-IDF para validacao em hardware.
-
-```bash
-./iniciar.sh validar       # pytest + compilacao firmware + compilacao Unity
-./iniciar.sh unity         # apenas compilacao do app Unity
-./iniciar.sh flash-testes  # grava o app Unity na placa e abre monitor serial
-```
+As duas pipelines geram `ml/relatorios/tictactoe_training_report.json` e `ml/relatorios/presenca_training_report.json`. Esses arquivos documentam dataset, split treino/teste, matriz de confusao, amostras representativas de quantizacao, contrato `full_integer_int8`, tamanho, SHA-256 dos artefatos e a ligacao direta com as quatro exigencias do PDF: sensor, treinamento, compressao e inferencia no dispositivo.
 
 ## Checklist de validacao no Wokwi
 
-- [ ] Menu aparece no OLED.
+- [ ] Menu legado aparece no OLED.
 - [ ] Teclado 4x4 navega pelos comandos do menu.
-- [ ] Tecla `A` inicia partida por teclado.
+- [ ] Tecla `A` inicia partida.
 - [ ] Teclas `1` a `9` realizam jogadas no tabuleiro.
-- [ ] LCD1602 exibe o algoritmo de IA utilizado na jogada do computador.
+- [ ] LCD1602 exibe `TFLite` na linha 1 e a linha 2 rola `Autores : Janiel e Patrik`.
+- [ ] Serial registra a inferencia de presenca do HC-SR04.
 - [ ] Tecla `*` liga o LED dourado.
 - [ ] Tecla `#` desliga o LED dourado.
-- [ ] Buzzer toca nos eventos principais.
-- [ ] Partida completa com vitoria do jogador.
-- [ ] Partida completa com vitoria do computador.
-- [ ] Partida completa com empate.
+- [ ] Tecla `B` exibe o placar.
+- [ ] Tecla `D` exibe o autor.
+- [ ] Tecla `0` zera o placar.
+- [ ] Tecla `9`, no modo tecnico, coleta CSV do HC-SR04 pelo serial.
