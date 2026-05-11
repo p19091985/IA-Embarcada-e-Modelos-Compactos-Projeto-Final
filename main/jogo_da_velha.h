@@ -19,6 +19,10 @@ typedef struct {
     bool mostrar_numeros;
 } jogo_estado_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void jogo_iniciar(jogo_estado_t *jogo);
 void jogo_resetar_tabuleiro(jogo_estado_t *jogo);
 bool jogo_posicao_valida(int posicao);
@@ -30,3 +34,8 @@ bool jogo_verificar_empate_tabuleiro(const char tabuleiro[JOGO_TAMANHO][JOGO_TAM
 bool jogo_verificar_empate(const jogo_estado_t *jogo);
 void jogo_zerar_placar(jogo_estado_t *jogo);
 void jogo_formatar_linha_tabuleiro(const jogo_estado_t *jogo, int linha, char *saida, int tamanho);
+void jogo_formatar_linha_tabuleiro_expandida(const jogo_estado_t *jogo, int linha, char *saida, int tamanho);
+
+#ifdef __cplusplus
+}
+#endif

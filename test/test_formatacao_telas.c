@@ -12,3 +12,14 @@ void test_linha_do_tabuleiro_cabe_no_oled(void)
 
     TEST_ASSERT_EQUAL_STRING("1|2|3", linha);
 }
+
+void test_linha_do_tabuleiro_expandida_preserva_espacamento(void)
+{
+    jogo_estado_t jogo;
+    char linha[16];
+
+    jogo_iniciar(&jogo);
+    jogo_formatar_linha_tabuleiro_expandida(&jogo, 0, linha, sizeof(linha));
+
+    TEST_ASSERT_EQUAL_STRING(" 1 | 2 | 3 ", linha);
+}

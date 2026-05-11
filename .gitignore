@@ -7,6 +7,9 @@ codigo/
 .codex
 .codex/
 .vscode/
+docs/projeto.md
+docs/resumo.md
+docs/
 *.o
 codigo-ET/
 *.ko

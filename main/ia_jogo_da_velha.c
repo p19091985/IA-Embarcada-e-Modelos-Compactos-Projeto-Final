@@ -19,6 +19,10 @@ const char *ia_nome(ia_algoritmo_t algoritmo)
         return "Forca bruta";
     case IA_GENETICO:
         return "Genetico";
+    case IA_TFLITE:
+        return "TFLite";
+    case IA_MINIMAX_FALLBACK:
+        return "Minimax FB";
     case IA_MINIMAX:
     default:
         return "Minimax";

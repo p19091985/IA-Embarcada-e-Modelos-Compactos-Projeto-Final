@@ -122,3 +122,18 @@ void jogo_formatar_linha_tabuleiro(const jogo_estado_t *jogo, int linha, char *s
 
     snprintf(saida, tamanho, "%c|%c|%c", a, b, c);
 }
+
+void jogo_formatar_linha_tabuleiro_expandida(const jogo_estado_t *jogo, int linha, char *saida, int tamanho)
+{
+    char a = jogo->casas[linha][0];
+    char b = jogo->casas[linha][1];
+    char c = jogo->casas[linha][2];
+
+    if (jogo->mostrar_numeros) {
+        a = (char)('1' + linha * JOGO_TAMANHO);
+        b = (char)('2' + linha * JOGO_TAMANHO);
+        c = (char)('3' + linha * JOGO_TAMANHO);
+    }
+
+    snprintf(saida, tamanho, " %c | %c | %c ", a, b, c);
+}

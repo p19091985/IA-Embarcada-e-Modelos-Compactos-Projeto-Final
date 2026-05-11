@@ -9,6 +9,8 @@ typedef enum {
     IA_HEURISTICA,
     IA_FORCA_BRUTA,
     IA_GENETICO,
+    IA_TFLITE,
+    IA_MINIMAX_FALLBACK,
 } ia_algoritmo_t;
 
 typedef struct {
@@ -17,5 +19,13 @@ typedef struct {
     const char *nome_curto;
 } ia_resultado_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 ia_resultado_t ia_escolher_jogada(jogo_estado_t *jogo);
 const char *ia_nome(ia_algoritmo_t algoritmo);
+
+#ifdef __cplusplus
+}
+#endif

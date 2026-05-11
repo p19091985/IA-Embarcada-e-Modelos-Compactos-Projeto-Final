@@ -14,6 +14,7 @@ RODAR_TESTES=0
 COMPILAR_TESTES_C=0
 FLASH_TESTES_C=0
 USAR_MENU=0
+PYTHON_BIN="${PYTHON_BIN:-}"
 
 if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
     CORES="$(tput colors 2>/dev/null || echo 0)"
@@ -79,12 +80,21 @@ mostrar_checklist_wokwi() {
     printf "%b\n" "No VS Code, execute ${BOLD}Wokwi: Start Simulator${RESET}."
     echo
     echo "Checklist:"
-    echo "  [ ] OLED mostra o menu inicial"
-    echo "  [ ] Tecla A inicia uma partida"
-    echo "  [ ] Teclas 1 a 9 fazem jogadas"
+    echo "  [ ] OLED mostra o menu antigo: A - Jogar, B - Placar, C - Sair, D - About, 0 - Zerar, Escolha"
+    echo "  [ ] Tecla A inicia a partida classica"
+    echo "  [ ] Tabuleiro apos A usa o desenho antigo com ---+---+---"
+    echo "  [ ] Teclas 1 a 9 fazem jogadas no modo classico"
+    echo "  [ ] Tecla B mostra placar no estilo antigo"
+    echo "  [ ] Tecla D mostra autor no estilo antigo"
     echo "  [ ] LCD1602 mostra o algoritmo da IA"
     echo "  [ ] Tecla * liga o LED dourado"
     echo "  [ ] Tecla # desliga o LED dourado"
+    echo "  [ ] Atalho tecnico 8 inicia o modo gesto/auto-scan"
+    echo "  [ ] No modo 8, gesto confirma a casa destacada"
+    echo "  [ ] Atalho tecnico 9 abre o modo de coleta do MPU6050"
+    echo "  [ ] Serial mostra timestamp_ms,ax,ay,az,label em 50 Hz"
+    echo "  [ ] Na coleta, 0 muda para label 0 e 1 muda para label 1"
+    echo "  [ ] Na coleta, D encerra e volta ao menu"
     echo "  [ ] Buzzer toca nas teclas, inicializacao e vitoria"
     echo "  [ ] Partida termina com vitoria do jogador"
     echo "  [ ] Partida termina com vitoria do computador"
@@ -277,8 +287,15 @@ printf "%b\n" "${CYAN}==>${RESET} Compilando firmware principal..."
 idf.py build
 
 if [ "$RODAR_TESTES" = "1" ]; then
-    printf "%b\n" "${CYAN}==>${RESET} Rodando teste Python do diagram.json..."
-    python -m pytest test/test_diagram_json.py
+    printf "%b\n" "${CYAN}==>${RESET} Rodando testes Python..."
+    if [ -z "$PYTHON_BIN" ]; then
+        if command -v python >/dev/null 2>&1; then
+            PYTHON_BIN=python
+        else
+            PYTHON_BIN=python3
+        fi
+    fi
+    "$PYTHON_BIN" -m pytest test/test_diagram_json.py test/test_pipeline_tictactoe.py test/test_pipeline_gestos.py
 fi
 
 if [ "$COMPILAR_TESTES_C" = "1" ]; then
