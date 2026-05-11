@@ -58,9 +58,196 @@ uso() {
     echo "  ./iniciar.sh simular         igual a vscode, com checklist para Wokwi"
     echo "  ./iniciar.sh unity           compila apenas o app Unity/ESP-IDF em test/build_tests"
     echo "  ./iniciar.sh flash-testes    grava e abre monitor serial do app Unity"
+    echo "  ./iniciar.sh setup           verifica e instala dependencias (ESP-IDF, pytest)"
     echo "  ./iniciar.sh limpar validar  limpa build principal e executa validacao"
     echo "  CLEAN=1 ./iniciar.sh build   limpa com idf.py fullclean antes do build"
 }
+
+# ============================================================================
+# Deteccao e instalacao automatica de dependencias
+# ============================================================================
+
+encontrar_idf() {
+    # Prioridade: variavel de ambiente > instalacao padrao > home do usuario
+    if [ -n "${IDF_EXPORT:-}" ] && [ -f "$IDF_EXPORT" ]; then
+        return 0
+    fi
+
+    if [ -n "${IDF_PATH:-}" ] && [ -f "$IDF_PATH/export.sh" ]; then
+        IDF_EXPORT="$IDF_PATH/export.sh"
+        return 0
+    fi
+
+    # Procura em locais comuns
+    local caminhos_possiveis=(
+        "$HOME/.espressif/v6.0.1/esp-idf/export.sh"
+        "$HOME/esp/esp-idf/export.sh"
+        "$HOME/.espressif/esp-idf/export.sh"
+        "$HOME/esp-idf/export.sh"
+        "/opt/esp-idf/export.sh"
+        "/usr/local/esp-idf/export.sh"
+    )
+
+    # Tambem procura por qualquer versao em .espressif
+    if [ -d "$HOME/.espressif" ]; then
+        for dir in "$HOME/.espressif"/*/esp-idf; do
+            if [ -f "$dir/export.sh" ]; then
+                caminhos_possiveis+=("$dir/export.sh")
+            fi
+        done
+    fi
+
+    for caminho in "${caminhos_possiveis[@]}"; do
+        if [ -f "$caminho" ]; then
+            IDF_EXPORT="$caminho"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+VENV_DIR="$PASTA/.venv"
+
+encontrar_python() {
+    if [ -n "$PYTHON_BIN" ]; then
+        return 0
+    fi
+
+    # Se a venv existe e tem python, usa ela
+    if [ -f "$VENV_DIR/bin/python" ]; then
+        PYTHON_BIN="$VENV_DIR/bin/python"
+        return 0
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+        PYTHON_BIN=python3
+    elif command -v python >/dev/null 2>&1; then
+        PYTHON_BIN=python
+    else
+        return 1
+    fi
+    return 0
+}
+
+verificar_pytest() {
+    "$PYTHON_BIN" -m pytest --version >/dev/null 2>&1
+}
+
+garantir_venv() {
+    if [ -f "$VENV_DIR/bin/python" ] && "$VENV_DIR/bin/python" -m pytest --version >/dev/null 2>&1; then
+        PYTHON_BIN="$VENV_DIR/bin/python"
+        return 0
+    fi
+
+    local python_base=""
+    if command -v python3 >/dev/null 2>&1; then
+        python_base=python3
+    elif command -v python >/dev/null 2>&1; then
+        python_base=python
+    else
+        return 1
+    fi
+
+    if [ ! -f "$VENV_DIR/bin/python" ]; then
+        printf "%b\n" "${CYAN}==>${RESET} Criando ambiente virtual em .venv/..."
+        "$python_base" -m venv "$VENV_DIR" || {
+            printf "%b\n" "${RED}Erro:${RESET} Falha ao criar venv."
+            printf "%b\n" "Instale python3-venv: ${BOLD}sudo apt install python3-venv${RESET}"
+            return 1
+        }
+    fi
+
+    PYTHON_BIN="$VENV_DIR/bin/python"
+
+    if [ -f "$PASTA/requirements.txt" ]; then
+        printf "%b\n" "${CYAN}==>${RESET} Instalando dependencias Python na .venv/..."
+        "$PYTHON_BIN" -m pip install --upgrade pip >/dev/null 2>&1 || true
+        "$PYTHON_BIN" -m pip install -r "$PASTA/requirements.txt" >/dev/null 2>&1 || {
+            printf "%b\n" "${RED}Erro:${RESET} Falha ao instalar requirements.txt"
+            return 1
+        }
+    fi
+
+    printf "%b\n" "${GREEN}==>${RESET} Ambiente virtual pronto."
+    return 0
+}
+
+verificar_dependencias() {
+    local erro=0
+
+    printf "%b\n" "${CYAN}==> Verificando dependencias...${RESET}"
+
+    # Python
+    if encontrar_python; then
+        printf "%b\n" "  ${GREEN}✓${RESET} Python: $($PYTHON_BIN --version 2>&1)"
+    else
+        printf "%b\n" "  ${RED}✗${RESET} Python3 nao encontrado"
+        printf "%b\n" "    Instale com: ${BOLD}sudo apt install python3 python3-pip${RESET}"
+        erro=1
+    fi
+
+    # venv e pytest
+    if [ "$erro" = "0" ]; then
+        if garantir_venv; then
+            printf "%b\n" "  ${GREEN}✓${RESET} venv: $VENV_DIR"
+            printf "%b\n" "  ${GREEN}✓${RESET} pytest: $($PYTHON_BIN -m pytest --version 2>&1 | head -1)"
+        else
+            printf "%b\n" "  ${RED}✗${RESET} Falha ao configurar ambiente virtual"
+            erro=1
+        fi
+    fi
+
+    # ESP-IDF
+    if encontrar_idf; then
+        printf "%b\n" "  ${GREEN}✓${RESET} ESP-IDF: $IDF_EXPORT"
+    else
+        printf "%b\n" "  ${RED}✗${RESET} ESP-IDF nao encontrado"
+        printf "%b\n" ""
+        printf "%b\n" "    O ESP-IDF e necessario para compilar o firmware."
+        printf "%b\n" "    Instale seguindo as instrucoes oficiais:"
+        printf "%b\n" "    ${BOLD}https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/get-started/${RESET}"
+        printf "%b\n" ""
+        printf "%b\n" "    Resumo rapido para Ubuntu/Debian:"
+        printf "%b\n" "      ${DIM}sudo apt install git wget flex bison gperf python3 python3-pip \\"
+        printf "%b\n" "        python3-venv cmake ninja-build ccache libffi-dev libssl-dev \\"
+        printf "%b\n" "        dfu-util libusb-1.0-0${RESET}"
+        printf "%b\n" "      ${DIM}mkdir -p ~/esp && cd ~/esp${RESET}"
+        printf "%b\n" "      ${DIM}git clone -b v5.4 --recursive https://github.com/espressif/esp-idf.git${RESET}"
+        printf "%b\n" "      ${DIM}cd esp-idf && ./install.sh esp32s3${RESET}"
+        printf "%b\n" ""
+        printf "%b\n" "    Depois, defina IDF_PATH ou IDF_EXPORT:"
+        printf "%b\n" "      ${BOLD}export IDF_PATH=~/esp/esp-idf${RESET}"
+        erro=1
+    fi
+
+    # git
+    if command -v git >/dev/null 2>&1; then
+        printf "%b\n" "  ${GREEN}✓${RESET} git: $(git --version 2>&1)"
+    else
+        printf "%b\n" "  ${YELLOW}!${RESET} git nao encontrado (opcional, mas recomendado)"
+    fi
+
+    # VS Code (opcional)
+    if command -v code >/dev/null 2>&1; then
+        printf "%b\n" "  ${GREEN}✓${RESET} VS Code: disponivel"
+    else
+        printf "%b\n" "  ${DIM}-${RESET} VS Code: nao encontrado (opcional, necessario para simulacao Wokwi)"
+    fi
+
+    echo
+    if [ "$erro" = "1" ]; then
+        printf "%b\n" "${RED}Dependencias faltando. Corrija os itens acima e tente novamente.${RESET}"
+        return 1
+    else
+        printf "%b\n" "${GREEN}Todas as dependencias obrigatorias estao presentes.${RESET}"
+        return 0
+    fi
+}
+
+# ============================================================================
+# Interface
+# ============================================================================
 
 abrir_vscode() {
     if command -v code >/dev/null 2>&1; then
@@ -75,30 +262,30 @@ abrir_vscode() {
 mostrar_checklist_wokwi() {
     echo
     linha
-    printf "%b\n" "${BOLD}${CYAN}Teste manual no Wokwi${RESET}"
+    printf "%b\n" "${BOLD}${CYAN}Validacao manual no Wokwi${RESET}"
     linha
     printf "%b\n" "No VS Code, execute ${BOLD}Wokwi: Start Simulator${RESET}."
     echo
     echo "Checklist:"
-    echo "  [ ] OLED mostra o menu antigo: A - Jogar, B - Placar, C - Sair, D - About, 0 - Zerar, Escolha"
-    echo "  [ ] Tecla A inicia a partida classica"
-    echo "  [ ] Tabuleiro apos A usa o desenho antigo com ---+---+---"
-    echo "  [ ] Teclas 1 a 9 fazem jogadas no modo classico"
-    echo "  [ ] Tecla B mostra placar no estilo antigo"
-    echo "  [ ] Tecla D mostra autor no estilo antigo"
-    echo "  [ ] LCD1602 mostra o algoritmo da IA"
+    echo "  [ ] OLED exibe o menu principal"
+    echo "  [ ] Tecla A inicia a partida por teclado"
+    echo "  [ ] Tabuleiro exibe formato com ---+---+---"
+    echo "  [ ] Teclas 1 a 9 selecionam posicoes no tabuleiro"
+    echo "  [ ] Tecla B exibe o placar"
+    echo "  [ ] Tecla D exibe o autor"
+    echo "  [ ] LCD1602 exibe o algoritmo de IA utilizado"
     echo "  [ ] Tecla * liga o LED dourado"
     echo "  [ ] Tecla # desliga o LED dourado"
-    echo "  [ ] Atalho tecnico 8 inicia o modo gesto/auto-scan"
+    echo "  [ ] Tecla 8 inicia o modo gesto/auto-scan"
     echo "  [ ] No modo 8, gesto confirma a casa destacada"
-    echo "  [ ] Atalho tecnico 9 abre o modo de coleta do MPU6050"
-    echo "  [ ] Serial mostra timestamp_ms,ax,ay,az,label em 50 Hz"
-    echo "  [ ] Na coleta, 0 muda para label 0 e 1 muda para label 1"
-    echo "  [ ] Na coleta, D encerra e volta ao menu"
+    echo "  [ ] Tecla 9 ativa o modo de coleta do MPU6050"
+    echo "  [ ] Serial exibe timestamp_ms,ax,ay,az,label a 50 Hz"
+    echo "  [ ] Na coleta, 0 define label repouso e 1 define label confirmacao"
+    echo "  [ ] Na coleta, D encerra e retorna ao menu"
     echo "  [ ] Buzzer toca nas teclas, inicializacao e vitoria"
-    echo "  [ ] Partida termina com vitoria do jogador"
-    echo "  [ ] Partida termina com vitoria do computador"
-    echo "  [ ] Partida termina com empate"
+    echo "  [ ] Partida encerra com vitoria do jogador"
+    echo "  [ ] Partida encerra com vitoria do computador"
+    echo "  [ ] Partida encerra com empate"
     linha
 }
 
@@ -135,6 +322,7 @@ menu() {
         printf "%b\n" "  ${CYAN}5${RESET}) Compilar, abrir VS Code e testar no Wokwi"
         printf "%b\n" "  ${YELLOW}6${RESET}) Gravar app Unity e abrir monitor serial"
         printf "%b\n" "  ${BLUE}7${RESET}) Abrir projeto e diagram.json no VS Code"
+        printf "%b\n" "  ${MAGENTA}8${RESET}) Verificar dependencias (setup)"
         printf "%b\n" "  ${RED}0${RESET}) Sair"
         linha
         printf "%b" "${BOLD}Escolha uma opcao:${RESET} "
@@ -172,6 +360,11 @@ menu() {
             7)
                 SO_ABRIR_VSCODE=1
                 return
+                ;;
+            8)
+                verificar_dependencias || true
+                printf "%b" "\nPressione Enter para voltar ao menu..."
+                IFS= read -r _ || true
                 ;;
             0|s|S|sair|Sair|SAIR|q|Q)
                 printf "%b\n" "${GREEN}Saindo. Nada foi alterado.${RESET}"
@@ -217,6 +410,10 @@ for arg in "$@"; do
         somente-vscode|so-vscode|--only-vscode)
             SO_ABRIR_VSCODE=1
             ;;
+        setup|dependencias|deps|--setup|--deps)
+            verificar_dependencias
+            exit $?
+            ;;
         menu|--menu|-m)
             USAR_MENU=1
             ;;
@@ -236,12 +433,28 @@ if { [ "$#" -eq 0 ] && [ "${CLEAN:-0}" != "1" ]; } || [ "$USAR_MENU" = "1" ]; th
     menu
 fi
 
-if [ -z "${IDF_EXPORT:-}" ]; then
-    if [ -n "${IDF_PATH:-}" ]; then
-        IDF_EXPORT="$IDF_PATH/export.sh"
-    else
-        IDF_EXPORT="$HOME/.espressif/v6.0.1/esp-idf/export.sh"
+# Verificacao automatica de dependencias na primeira execucao
+if ! encontrar_python; then
+    printf "%b\n" "${RED}Erro:${RESET} Python3 nao encontrado."
+    printf "%b\n" "Instale com: ${BOLD}sudo apt install python3 python3-pip python3-venv${RESET}"
+    exit 1
+fi
+
+if [ "$RODAR_TESTES" = "1" ]; then
+    if ! garantir_venv; then
+        printf "%b\n" "${RED}Erro:${RESET} Falha ao preparar ambiente virtual."
+        printf "%b\n" "Instale python3-venv: ${BOLD}sudo apt install python3-venv${RESET}"
+        exit 1
     fi
+fi
+
+if ! encontrar_idf; then
+    printf "%b\n" "${RED}Erro:${RESET} ESP-IDF nao encontrado."
+    printf "%b\n" ""
+    printf "%b\n" "Rode ${BOLD}./iniciar.sh setup${RESET} para ver instrucoes de instalacao,"
+    printf "%b\n" "ou defina a variavel de ambiente:"
+    printf "%b\n" "  ${BOLD}export IDF_PATH=/caminho/para/esp-idf${RESET}"
+    exit 1
 fi
 
 cd "$PASTA"
@@ -253,17 +466,11 @@ if [ "$SO_ABRIR_VSCODE" = "1" ]; then
 fi
 
 printf "%b\n" "${CYAN}==>${RESET} Carregando ESP-IDF de: $IDF_EXPORT"
-if [ ! -f "$IDF_EXPORT" ]; then
-    printf "%b\n" "${RED}Erro:${RESET} Nao achei o ESP-IDF em: $IDF_EXPORT"
-    echo "Ajuste a variavel IDF_EXPORT se instalou em outro lugar."
-    exit 1
-fi
-
 . "$IDF_EXPORT"
 
 if [ "${CLEAN:-0}" = "1" ] || [ "$LIMPAR" = "1" ]; then
     if [ -d build ]; then
-        printf "%b\n" "${CYAN}==>${RESET} Limpando build principal antigo..."
+        printf "%b\n" "${CYAN}==>${RESET} Limpando build principal..."
         idf.py fullclean
     else
         printf "%b\n" "${YELLOW}==>${RESET} Nada para limpar: build/ nao existe."
@@ -288,13 +495,6 @@ idf.py build
 
 if [ "$RODAR_TESTES" = "1" ]; then
     printf "%b\n" "${CYAN}==>${RESET} Rodando testes Python..."
-    if [ -z "$PYTHON_BIN" ]; then
-        if command -v python >/dev/null 2>&1; then
-            PYTHON_BIN=python
-        else
-            PYTHON_BIN=python3
-        fi
-    fi
     "$PYTHON_BIN" -m pytest test/test_diagram_json.py test/test_pipeline_tictactoe.py test/test_pipeline_gestos.py
 fi
 

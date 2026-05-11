@@ -44,10 +44,26 @@ A tecla `9` ativa o modo de coleta de dados do MPU6050 a 50 Hz, produzindo CSV v
 
 O OLED SSD1306 e o MPU6050 compartilham o barramento I2C_NUM_0 (GPIO14/SDA, GPIO15/SCL) a 400 kHz. O LCD1602 opera em barramento dedicado I2C_NUM_1 (GPIO16/SDA, GPIO17/SCL) a 100 kHz, evitando conflitos de inicializacao.
 
+## Preparacao do ambiente
+
+O unico pre-requisito externo e o [ESP-IDF](https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/get-started/) e o Python 3 com o modulo `venv`. Na primeira execucao, o script `iniciar.sh` cria automaticamente um ambiente virtual em `.venv/`, instala as dependencias Python do `requirements.txt` e localiza a instalacao do ESP-IDF.
+
+```bash
+./iniciar.sh setup          # verifica todas as dependencias e exibe o status
+```
+
+Caso o ESP-IDF esteja instalado em local diferente do padrao, defina a variavel antes de executar:
+
+```bash
+export IDF_PATH=/caminho/para/esp-idf
+./iniciar.sh validar
+```
+
 ## Compilacao e simulacao
 
 ```bash
-./iniciar.sh                # compila o firmware
+./iniciar.sh                # abre o menu interativo
+./iniciar.sh build          # compila o firmware principal
 ./iniciar.sh validar        # compila firmware, executa pytest e compila testes Unity
 ./iniciar.sh simular        # valida, abre VS Code e exibe checklist do Wokwi
 ./iniciar.sh unity          # compila o app Unity/ESP-IDF dos testes C
@@ -59,7 +75,7 @@ Para simular, execute `./iniciar.sh simular` e rode o comando `Wokwi: Start Simu
 Para compilacao manual:
 
 ```bash
-. /home/patrik/.espressif/v6.0.1/esp-idf/export.sh
+. $IDF_PATH/export.sh
 idf.py set-target esp32s3
 idf.py build
 ```
