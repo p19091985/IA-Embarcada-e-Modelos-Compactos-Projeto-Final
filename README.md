@@ -1,6 +1,6 @@
 # Projeto Final: Jogo da Velha com IA Embarcada no ESP32-S3
 
-**Autor:** Patrik (e Janiel)
+**Autor:** Patrik, João Vitor e Janiel
 
 ---
 
