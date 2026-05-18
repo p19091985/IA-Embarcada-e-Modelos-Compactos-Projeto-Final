@@ -101,9 +101,10 @@ esp_err_t microfone_capturar(int16_t *amostras, int n_amostras)
                                          s_raw_chunk,
                                          (size_t)frames * sizeof(int32_t),
                                          &bytes_lidos,
-                                         pdMS_TO_TICKS(3000));
-        if (err != ESP_OK) {
-            return err;
+                                         pdMS_TO_TICKS(100));
+        /* Sem microfone (Wokwi): sai imediatamente no primeiro chunk vazio */
+        if (err != ESP_OK || (offset == 0 && bytes_lidos == 0)) {
+            return (err != ESP_OK) ? err : ESP_ERR_TIMEOUT;
         }
 
         /* INMP441: dado de 24 bits MSB no word de 32 bits — desloca 16 bits */
