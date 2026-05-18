@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "author": "Patrik Lima Pereira",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-s3-devkitc-1",
+      "id": "esp",
+      "top": -150,
+      "left": 200,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-membrane-keypad",
+      "id": "keypad1",
+      "top": -370,
+      "left": -280,
+      "attrs": {}
+    },
+    {
+      "type": "board-ssd1306",
+      "id": "oled1",
+      "top": -80,
+      "left": -280,
+      "attrs": { "i2cAddress": "0x3c" }
+    },
+    {
+      "type": "wokwi-lcd1602",
+      "id": "lcd1",
+      "top": -370,
+      "left": 460,
+      "attrs": { "pins": "i2c", "i2cAddress": "0x27" }
+    },
+    {
+      "type": "wokwi-hc-sr04",
+      "id": "ultra1",
+      "top": 250,
+      "left": -280,
+      "attrs": { "distance": "75" }
+    },
+    {
+      "type": "wokwi-buzzer",
+      "id": "bz1",
+      "top": 280,
+      "left": 230,
+      "attrs": { "volume": "0.1" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led_verde",
+      "top": 100,
+      "left": 500,
+      "attrs": { "color": "green", "label": "Rodando" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led_vermelho",
+      "top": 160,
+      "left": 500,
+      "attrs": { "color": "red", "label": "Parado" }
+    },
+    {
+      "type": "wokwi-gnd",
+      "id": "gnd1",
+      "top": 380,
+      "left": 110,
+      "attrs": {}
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+
+    [ "keypad1:R1", "esp:2", "white",   [] ],
+    [ "keypad1:R2", "esp:3", "gray",    [] ],
+    [ "keypad1:R3", "esp:4", "violet",  [] ],
+    [ "keypad1:R4", "esp:5", "violet",  [] ],
+    [ "keypad1:C1", "esp:6", "gold",    [] ],
+    [ "keypad1:C2", "esp:7", "orange",  [] ],
+    [ "keypad1:C3", "esp:8", "#8f4814", [] ],
+    [ "keypad1:C4", "esp:9", "cyan",    [] ],
+
+    [ "esp:3V3",   "oled1:VCC", "red",     [] ],
+    [ "oled1:GND", "gnd1:GND",  "black",   [] ],
+    [ "oled1:SDA", "esp:14",    "yellow",  [] ],
+    [ "oled1:SCL", "esp:15",    "magenta", [] ],
+
+    [ "lcd1:VCC", "esp:3V3",  "red",   [] ],
+    [ "lcd1:GND", "gnd1:GND", "black", [] ],
+    [ "lcd1:SDA", "esp:16",   "green", [] ],
+    [ "lcd1:SCL", "esp:17",   "green", [] ],
+
+    [ "ultra1:VCC",  "esp:3V3",  "red",    [] ],
+    [ "ultra1:GND",  "gnd1:GND", "black",  [] ],
+    [ "ultra1:TRIG", "esp:19",   "orange", [] ],
+    [ "ultra1:ECHO", "esp:20",   "cyan",   [] ],
+
+    [ "bz1:1", "gnd1:GND", "black", [] ],
+    [ "bz1:2", "esp:18",   "green", [] ],
+
+    [ "led_verde:A",    "esp:12",   "green", [] ],
+    [ "led_verde:K",    "gnd1:GND", "black", [] ],
+    [ "led_vermelho:A", "esp:10",   "red",   [] ],
+    [ "led_vermelho:K", "gnd1:GND", "black", [] ]
+  ],
+  "serialMonitor": { "display": "terminal", "newline": "lf" },
+  "dependencies": {}
+}

@@ -1,0 +1,337 @@
+{
+  "modelo": "jogo_da_velha",
+  "objetivo": "Selecionar a jogada do computador mantendo o jogo legado intacto.",
+  "notebook_base": "codigo/tflite_hello_world_training.ipynb",
+  "pdf_requisitos": "codigo/Descrição do projeto final.pdf",
+  "experiencia_usuario": "inalterada: teclado, OLED, LCD, LEDs e buzzer seguem o fluxo Alpha0",
+  "pipeline": [
+    "geracao do dataset supervisionado",
+    "treinamento Keras pequeno no padrao Hello World",
+    "conversao para TFLite float",
+    "quantizacao inteira INT8 com dataset representativo",
+    "exportacao do FlatBuffer como array C",
+    "inferencia TFLite Micro no ESP32-S3"
+  ],
+  "dataset": {
+    "linhas": 2097,
+    "features": 9,
+    "rotulo": "best_move",
+    "classes": {
+      "0": 426,
+      "1": 252,
+      "2": 301,
+      "3": 162,
+      "4": 340,
+      "5": 124,
+      "6": 200,
+      "7": 109,
+      "8": 183
+    },
+    "casas_ocupadas": {
+      "1": 9,
+      "3": 252,
+      "5": 1140,
+      "7": 696
+    },
+    "origem_rotulo": "minimax offline usado somente para gerar o dataset"
+  },
+  "treinamento": {
+    "executado": true,
+    "semente": 42,
+    "split": {
+      "treino": 1678,
+      "teste": 419,
+      "semente": 42
+    },
+    "epocas_executadas": 100,
+    "alvo": "politica multi-alvo com todas as jogadas minimax otimas",
+    "arquitetura": [
+      "Input(9)",
+      "Dense(32,relu)",
+      "Dense(32,relu)",
+      "Dense(9,logits)"
+    ]
+  },
+  "metricas": {
+    "float": {
+      "acuracia": 0.7326968973747017,
+      "acuracia_mascara": 0.7326968973747017,
+      "jogada_otima": 0.9618138424821002,
+      "acertos": 307,
+      "acertos_mascara": 307,
+      "acertos_jogada_otima": 403,
+      "amostras": 419,
+      "matriz_confusao": [
+        [
+          48,
+          5,
+          7,
+          6,
+          8,
+          1,
+          4,
+          2,
+          3
+        ],
+        [
+          0,
+          37,
+          1,
+          3,
+          6,
+          7,
+          3,
+          3,
+          3
+        ],
+        [
+          0,
+          1,
+          42,
+          0,
+          1,
+          0,
+          3,
+          4,
+          6
+        ],
+        [
+          1,
+          0,
+          0,
+          23,
+          7,
+          0,
+          2,
+          0,
+          3
+        ],
+        [
+          2,
+          0,
+          1,
+          0,
+          52,
+          1,
+          1,
+          0,
+          7
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          17,
+          0,
+          0,
+          2
+        ],
+        [
+          1,
+          0,
+          1,
+          0,
+          0,
+          0,
+          33,
+          2,
+          1
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          27,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          28
+        ]
+      ],
+      "tamanho_kb": 8.390625
+    },
+    "int8": {
+      "acuracia": 0.7326968973747017,
+      "acuracia_mascara": 0.7326968973747017,
+      "jogada_otima": 0.964200477326969,
+      "acertos": 307,
+      "acertos_mascara": 307,
+      "acertos_jogada_otima": 404,
+      "amostras": 419,
+      "matriz_confusao": [
+        [
+          49,
+          5,
+          6,
+          6,
+          8,
+          1,
+          4,
+          2,
+          3
+        ],
+        [
+          0,
+          35,
+          1,
+          3,
+          6,
+          7,
+          3,
+          3,
+          5
+        ],
+        [
+          0,
+          1,
+          42,
+          0,
+          1,
+          0,
+          3,
+          4,
+          6
+        ],
+        [
+          1,
+          0,
+          0,
+          23,
+          7,
+          0,
+          2,
+          0,
+          3
+        ],
+        [
+          2,
+          0,
+          1,
+          0,
+          52,
+          1,
+          1,
+          0,
+          7
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          17,
+          0,
+          0,
+          2
+        ],
+        [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          34,
+          2,
+          1
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          27,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          28
+        ]
+      ],
+      "tamanho_kb": 5.7109375
+    },
+    "delta_int8_menos_float": {
+      "acuracia": 0.0,
+      "acuracia_mascara": 0.0,
+      "jogada_otima": 0.0023866348448687846
+    }
+  },
+  "quantizacao": {
+    "tipo": "full_integer_int8",
+    "amostras_representativas": 512,
+    "contrato_tflite": {
+      "tipo": "full_integer_int8",
+      "entrada_dtype": "<class 'numpy.int8'>",
+      "saida_dtype": "<class 'numpy.int8'>",
+      "entrada_shape": [
+        1,
+        9
+      ],
+      "saida_shape": [
+        1,
+        9
+      ],
+      "entrada_quantization": [
+        0.007843137718737125,
+        -1
+      ],
+      "saida_quantization": [
+        0.0688798725605011,
+        27
+      ]
+    }
+  },
+  "artefatos": {
+    "dataset": {
+      "path": "ml/datasets/dataset_tictactoe.csv",
+      "bytes": 50792,
+      "sha256": "db829bbbe2183712022e89ad6fb68a5a31bd3e4922f885ae9139371756dd1e89"
+    },
+    "modelo_float": {
+      "path": "ml/models/tictactoe_float.tflite",
+      "bytes": 8592,
+      "sha256": "1366147b121416714e8be462ec901cd419f428373ca152773fbeac72796e4e99"
+    },
+    "modelo_int8": {
+      "path": "ml/models/tictactoe_int8.tflite",
+      "bytes": 5848,
+      "sha256": "1472a481ef721dab391431819f08b59521172e18063bf8f6e01302694774013e"
+    },
+    "header": {
+      "path": "main/tictactoe_model_data.h",
+      "bytes": 37784,
+      "sha256": "cb34dd86ff9a2d9a70de67515c405d7e5ba7b4fa2ca0b9858dc49b0cb9011712"
+    }
+  },
+  "requisitos_pdf": {
+    "treinamento": "modelo treinado com dataset gerado e validado",
+    "conversao_compressao": "TFLite float e TFLite INT8 full integer",
+    "pipeline_inferencia": "main/ia_tflite.cc executa TFLite Micro e mascara casas ocupadas",
+    "coleta_sensor": "cumprida pelo classificador de presenca HC-SR04 em pipeline separada"
+  }
+}
