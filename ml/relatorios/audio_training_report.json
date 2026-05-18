@@ -1,0 +1,345 @@
+{
+  "modelo": "audio_digitos_ptbr",
+  "objetivo": "Classificar digitos falados em PT-BR (1-9) para selecionar posicao no jogo.",
+  "pipeline": [
+    "coleta de audio com coletar_audio.py",
+    "features Goertzel 40D (8 bandas x 5 frames)",
+    "treinamento MLP Keras",
+    "conversao TFLite float e INT8 full integer",
+    "exportacao do header C com modelo e normalizacao",
+    "inferencia TFLite Micro no ESP32-S3 (audio_classificador.cc)"
+  ],
+  "sensor": "INMP441 I2S — GPIO WS=21, SCK=38, SD=39",
+  "sample_rate": 16000,
+  "features": {
+    "n": 40,
+    "tipo": "Goertzel log-energia",
+    "freq_bands_hz": [
+      250.0,
+      400.0,
+      600.0,
+      900.0,
+      1300.0,
+      1900.0,
+      2700.0,
+      3800.0
+    ],
+    "n_frames": 5,
+    "n_bands": 8
+  },
+  "arquitetura": [
+    "Input(40)",
+    "Dense(64,relu)",
+    "Dense(32,relu)",
+    "Dense(10,logits)"
+  ],
+  "dataset": {
+    "total": 20,
+    "classes": {
+      "0": 2,
+      "1": 2,
+      "2": 2,
+      "3": 2,
+      "4": 2,
+      "5": 2,
+      "6": 2,
+      "7": 2,
+      "8": 2,
+      "9": 2
+    },
+    "features": 40,
+    "rotulos": {
+      "0": "silencio",
+      "1": "um",
+      "2": "dois",
+      "3": "tres",
+      "4": "quatro",
+      "5": "cinco",
+      "6": "seis",
+      "7": "sete",
+      "8": "oito",
+      "9": "nove"
+    },
+    "freq_bands_hz": [
+      250.0,
+      400.0,
+      600.0,
+      900.0,
+      1300.0,
+      1900.0,
+      2700.0,
+      3800.0
+    ],
+    "n_frames": 5,
+    "n_bands": 8
+  },
+  "treinamento": {
+    "epocas": 0,
+    "semente": 42,
+    "optimizer": "adam"
+  },
+  "metricas": {
+    "float": {
+      "acuracia": 0.0,
+      "acertos": 0,
+      "amostras_teste": 4,
+      "tamanho_kb": 21.58984375,
+      "matriz_confusao": [
+        [
+          0,
+          2,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    "int8": {
+      "acuracia": 0.0,
+      "acertos": 0,
+      "amostras_teste": 4,
+      "tamanho_kb": 9.90625,
+      "matriz_confusao": [
+        [
+          0,
+          2,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ]
+    }
+  },
+  "requisitos_pdf": {
+    "coleta_dados_sensores": "INMP441 captura audio a 16 kHz via I2S",
+    "treinamento": "MLP treinado com dataset proprio de digitos PT-BR",
+    "conversao_compressao": "TFLite INT8 full integer",
+    "pipeline_inferencia": "audio_classificador.cc: captura -> Goertzel -> norm -> TFLite Micro"
+  }
+}

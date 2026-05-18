@@ -12,6 +12,8 @@ idf_component_register(
         "ldr.c"
         "ia_tflite.cc"
         "presenca_tflite.cc"
+        "microfone_i2s.c"
+        "audio_classificador.cc"
     INCLUDE_DIRS "."
-    REQUIRES esp_adc esp_driver_gpio esp_driver_i2c esp_driver_ledc esp_rom esp_timer esp-tflite-micro
+    REQUIRES esp_adc esp_driver_gpio esp_driver_i2c esp_driver_i2s esp_driver_ledc esp_rom esp_timer esp-tflite-micro
 )

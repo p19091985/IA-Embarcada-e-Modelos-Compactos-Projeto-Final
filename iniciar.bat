@@ -128,7 +128,7 @@ goto :fim
 :menu
 cls
 echo ------------------------------------------------------------
-echo   === Painel de Controle: Jogo da Velha (Patrik ^& Janiel) ===
+echo   === Painel de Controle: Jogo da Velha (Patrik, Janiel e Joao) ===
 echo ------------------------------------------------------------
 echo   1) Compilar firmware principal
 echo   2) Limpar tudo e compilar firmware
@@ -327,6 +327,16 @@ for %%p in (!CAMINHOS_IDF!) do (
     )
 )
 
+:: Procura em subpastas de C:\esp (instalacao via EIM, ex: C:\esp\v6.0.1\esp-idf)
+if exist "C:\esp" (
+    for /d %%v in ("C:\esp\*") do (
+        if exist "%%v\esp-idf\export.bat" (
+            set "IDF_EXPORT=%%v\esp-idf\export.bat"
+            exit /b 0
+        )
+    )
+)
+
 :: Procura em subpastas de .espressif
 if exist "%USERPROFILE%\.espressif" (
     for /d %%d in ("%USERPROFILE%\.espressif\*") do (
@@ -394,7 +404,7 @@ echo     [ ] Tecla A inicia a partida por teclado
 echo     [ ] Tabuleiro exibe formato com ---+---+---
 echo     [ ] Teclas 1 a 9 selecionam posicoes no tabuleiro
 echo     [ ] Tecla B exibe o placar
-echo     [ ] Tecla D exibe Janiel e Patrik no About
+echo     [ ] Tecla D exibe Patrik, Janiel e Joao no About
 echo     [ ] LCD1602 exibe TFLite na linha 1 e autores rolando na linha 2
 echo     [ ] Tecla * liga o LED dourado
 echo     [ ] Tecla # desliga o LED dourado

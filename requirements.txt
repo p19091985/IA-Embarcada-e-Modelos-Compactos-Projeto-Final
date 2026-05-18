@@ -1,1 +1,7 @@
 pytest
+numpy
+tensorflow
+soundfile
+sounddevice
+librosa
+scipy

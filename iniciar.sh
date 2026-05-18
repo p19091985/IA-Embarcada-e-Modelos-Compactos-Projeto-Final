@@ -272,7 +272,7 @@ mostrar_checklist_wokwi() {
     echo "  [ ] Tabuleiro exibe formato com ---+---+---"
     echo "  [ ] Teclas 1 a 9 selecionam posicoes no tabuleiro"
     echo "  [ ] Tecla B exibe o placar"
-    echo "  [ ] Tecla D exibe Janiel e Patrik no About"
+    echo "  [ ] Tecla D exibe Patrik, Janiel e Joao no About"
     echo "  [ ] LCD1602 exibe TFLite na linha 1 e autores rolando na linha 2"
     echo "  [ ] Tecla * liga o LED dourado"
     echo "  [ ] Tecla # desliga o LED dourado"
@@ -311,7 +311,7 @@ menu() {
         fi
 
         linha
-        printf "%b\n" "${BOLD}${CYAN}  === Painel de Controle: Jogo da Velha (Patrik & Janiel) ===${RESET}"
+        printf "%b\n" "${BOLD}${CYAN}  === Painel de Controle: Jogo da Velha (Patrik, Janiel e Joao) ===${RESET}"
         linha
         printf "%b\n" "  ${GREEN}1${RESET}) Compilar firmware principal"
         printf "%b\n" "  ${YELLOW}2${RESET}) Limpar tudo e compilar firmware"
