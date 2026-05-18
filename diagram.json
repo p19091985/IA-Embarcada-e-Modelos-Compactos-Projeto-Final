@@ -134,6 +134,13 @@
       }
     },
     {
+      "type": "wokwi-led",
+      "id": "led_vermelho",
+      "top": 204,
+      "left": 340,
+      "attrs": { "color": "red", "label": "Parado" }
+    },
+    {
       "type": "wokwi-buzzer",
       "id": "bz1",
       "top": 204,
@@ -208,7 +215,10 @@
     [ "bz2:2", "bz1:2", "green", [ "v-124.8", "h-38.8" ] ],
     [ "bz2:1", "bz1:1", "green", [ "v0" ] ],
     [ "bz1:1", "gnd1:GND", "green", [ "v-172.8", "h172.8" ] ],
-    [ "bz4:2", "esp:18", "green", [ "v-9.6", "h249.2", "v-268.8" ] ]
+    [ "bz4:2", "esp:18", "green", [ "v-9.6", "h249.2", "v-268.8" ] ],
+
+    [ "led_vermelho:A", "esp:35",   "red",   [] ],
+    [ "led_vermelho:K", "gnd1:GND", "black", [] ]
   ],
   "serialMonitor": { "display": "terminal", "newline": "lf" },
   "dependencies": {}
