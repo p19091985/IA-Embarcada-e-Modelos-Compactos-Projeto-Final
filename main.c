@@ -8,7 +8,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "audio_classificador.h"
 #include "buzzer.h"
 #include "hcsr04.h"
 #include "ia_jogo_da_velha.h"
@@ -17,7 +16,6 @@
 #include "ldr.h"
 #include "lcd1602_i2c.h"
 #include "leds.h"
-#include "microfone_i2s.h"
 #include "presenca_tflite.h"
 #include "ssd1306_i2c.h"
 #include "teclado_matricial.h"
@@ -53,11 +51,9 @@ static buzzer_t buzzer;
 static jogo_estado_t jogo;
 static ia_tflite_t modelo_ia;
 static presenca_tflite_t modelo_presenca;
-static audio_classificador_t modelo_audio;
 static hcsr04_t sensor_hcsr04;
 static ldr_t sensor_luz;
 static bool sensor_hcsr04_pronto;
-static bool microfone_pronto;
 static bool sensor_luz_pronto;
 static bool luz_dourada_manual;
 static int ldr_histerese_estado;
@@ -67,10 +63,7 @@ static uint32_t ultimo_log_presenca_ms;
 static bool lcd_status_iniciado;
 static uint32_t ultimo_lcd_status_ms;
 static uint32_t lcd_autores_passo;
-static volatile bool s_mic_init_done;
-static volatile esp_err_t s_mic_init_err;
 
-static void task_mic_init(void *pvParameters);
 static void mostrar_hello_world_treinamento(void);
 static void imprimir_acuracia_modelo(const char *rotulo, int valor_permyriad);
 static void mostrar_manual_serial(void);
@@ -89,7 +82,6 @@ static void atualizar_lcd_status_ia(bool forcar);
 static void atualizar_lcd_algoritmo(const ia_resultado_t *resultado);
 static const char *texto_lcd_algoritmo(const ia_resultado_t *resultado);
 static bool aguardar_jogada_teclado(int *posicao);
-static bool aguardar_jogada_voz_ou_teclado(int *posicao);
 static void atualizar_presenca_ambiente(void);
 static void atualizar_luz_automatica(void);
 static void coletar_dados_hcsr04(void);
@@ -241,14 +233,6 @@ static void mostrar_manual_serial(void)
     ESP_LOGI(TAG, "HC-SR04 rodando classificador TFLite em background.");
 }
 
-static void task_mic_init(void *pvParameters)
-{
-    (void)pvParameters;
-    s_mic_init_err = microfone_iniciar();
-    s_mic_init_done = true;
-    vTaskDelete(NULL);
-}
-
 static void inicializar_sensores(void)
 {
     sensor_hcsr04_pronto = false;
@@ -281,36 +265,6 @@ static void inicializar_sensores(void)
     } else {
         sensor_luz_pronto = true;
         ESP_LOGI(TAG, "LDR pronto: GPIO%d ADC1_CH9", LDR_GPIO_NUM);
-    }
-
-    microfone_pronto = false;
-    s_mic_init_done = false;
-    s_mic_init_err = ESP_FAIL;
-    {
-        TaskHandle_t mic_task = NULL;
-        xTaskCreate(task_mic_init, "mic_init", 4096, NULL, 1, &mic_task);
-        ESP_LOGI(TAG, "Aguardando mic init (max 2s)...");
-        for (int t = 0; t < 200 && !s_mic_init_done; t++) {
-            vTaskDelay(pdMS_TO_TICKS(10));
-        }
-        if (!s_mic_init_done) {
-            if (mic_task) {
-                vTaskDelete(mic_task);
-            }
-            ESP_LOGW(TAG, "Microfone init timeout; sem I2S neste ambiente.");
-        } else {
-            microfone_pronto = (s_mic_init_err == ESP_OK);
-            if (!microfone_pronto) {
-                ESP_LOGW(TAG, "Microfone INMP441 indisponivel (%s); jogada apenas por teclado.",
-                         esp_err_to_name(s_mic_init_err));
-            }
-        }
-    }
-    audio_classificador_iniciar(&modelo_audio);
-    if (microfone_pronto && modelo_audio.runtime_tflite) {
-        ESP_LOGI(TAG, "Classificador de voz pronto: fale 'um'-'nove' para jogar.");
-    } else if (microfone_pronto) {
-        ESP_LOGW(TAG, "Microfone pronto mas modelo de audio nao treinado. Execute ml/pipeline_audio.py.");
     }
 }
 
@@ -522,49 +476,6 @@ static bool aguardar_jogada_teclado(int *posicao)
     }
 }
 
-static bool aguardar_jogada_voz_ou_teclado(int *posicao)
-{
-    if (posicao == NULL) {
-        return false;
-    }
-
-    while (true) {
-        atualizar_lcd_status_ia(false);
-
-        /* Checagem rapida do teclado: 200 ms (20 x 10 ms) */
-        for (int i = 0; i < 20; i++) {
-            char tecla = teclado_matricial_ler(&teclado);
-            if (tecla == '*') {
-                luz_dourada_manual = true;
-                leds_definir_dourado(&leds, true);
-                leds_atualizar(&leds);
-            } else if (tecla == '#') {
-                luz_dourada_manual = true;
-                leds_definir_dourado(&leds, false);
-                leds_atualizar(&leds);
-            } else if (tecla >= '1' && tecla <= '9') {
-                *posicao = tecla - '0';
-                ESP_LOGI(TAG, "Jogada por teclado: posicao=%d", *posicao);
-                buzzer_som_tecla();
-                return true;
-            }
-            vTaskDelay(pdMS_TO_TICKS(10));
-        }
-
-        /* Tentativa de reconhecimento de voz (captura 1 s) */
-        if (microfone_pronto && modelo_audio.runtime_tflite) {
-            int digito = audio_classificador_capturar_e_classificar(&modelo_audio);
-            if (digito >= 1 && digito <= 9) {
-                *posicao = digito;
-                ESP_LOGI(TAG, "Jogada por voz: posicao=%d score=%ld",
-                         digito, (long)modelo_audio.ultimo_score);
-                buzzer_som_tecla();
-                return true;
-            }
-        }
-    }
-}
-
 static void atualizar_presenca_ambiente(void)
 {
     if (!sensor_hcsr04_pronto) {
@@ -681,7 +592,7 @@ static void jogar_partida(void)
         if (vez_do_jogador) {
             int posicao = 0;
 
-            if (!aguardar_jogada_voz_ou_teclado(&posicao)) {
+            if (!aguardar_jogada_teclado(&posicao)) {
                 return;
             }
 
@@ -746,7 +657,6 @@ static void jogar_partida(void)
 
 static void parar_programa(void)
 {
-    leds_definir_status_parado(&leds);
     atualizar_lcd_status_ia(true);
     mostrar_mensagem("Programa", "Finalizado", " ");
 
