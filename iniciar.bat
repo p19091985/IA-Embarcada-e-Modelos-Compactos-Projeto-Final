@@ -128,7 +128,7 @@ goto :fim
 :menu
 cls
 echo ------------------------------------------------------------
-echo   === Painel de Controle: Jogo da Velha (Patrik, Janiel e Joao) ===
+echo   === Painel de Controle: Jogo da Velha (Janiel - Joao Sanmartin - Patrik) ===
 echo ------------------------------------------------------------
 echo   1) Compilar firmware principal
 echo   2) Limpar tudo e compilar firmware
@@ -404,7 +404,7 @@ echo     [ ] Tecla A inicia a partida por teclado
 echo     [ ] Tabuleiro exibe formato com ---+---+---
 echo     [ ] Teclas 1 a 9 selecionam posicoes no tabuleiro
 echo     [ ] Tecla B exibe o placar
-echo     [ ] Tecla D exibe Patrik, Janiel e Joao no About
+echo     [ ] Tecla D exibe Janiel - Joao Sanmartin - Patrik no About
 echo     [ ] LCD1602 exibe TFLite na linha 1 e autores rolando na linha 2
 echo     [ ] Tecla * liga o LED dourado
 echo     [ ] Tecla # desliga o LED dourado
