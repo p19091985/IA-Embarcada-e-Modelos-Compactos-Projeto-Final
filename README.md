@@ -1,6 +1,6 @@
 # Projeto Final: Jogo da Velha com IA Embarcada no ESP32-S3
 
-**Autores:** Janiel - Joao Sanmartin - Patrik
+**Autores:** Patrik Lima Pereira · João Vitor · Janiel Rodrigues
 
 ---
 

@@ -36,12 +36,12 @@
 #define INTERVALO_COLETA_HCSR04_MS 100
 #define INTERVALO_PRESENCA_LOG_MS 1000
 #define INTERVALO_LCD_AUTORES_MS 350
-#define LCD_AUTORES_TEXTO "Autores: Janiel - Joao Sanmartin - Patrik"
+#define LCD_AUTORES_TEXTO "Autores: Patrik, Janiel e Joao"
 #define COLETA_HCSR04_CABECALHO_CSV "timestamp_ms,distancia_cm,eco_us,label"
 #define COLETA_HCSR04_LABEL_AUSENTE 0
 #define COLETA_HCSR04_LABEL_PRESENTE 1
 
-static const char *TAG = "ProjetoFinal_Janiel_JoaoSanmartin_Patrik";
+static const char *TAG = "ProjetoFinal_Patrik_Janiel_Joao";
 
 static ssd1306_t oled;
 static lcd1602_t lcd;
@@ -371,11 +371,11 @@ static void mostrar_placar(void)
 static void mostrar_autor(void)
 {
     const char *linhas[] = {
+        " ",
         "  Desenvolvido",
         "      por:",
-        "Janiel - Joao",
-        "Sanmartin -",
-        "Patrik",
+        " ",
+        " Patrik, Janiel e João",
     };
 
     exibir_oled_linhas("AUTOR", linhas, 5);

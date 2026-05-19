@@ -4,7 +4,7 @@
 #include "jogo_da_velha.h"
 
 /*
- * Testes de fidelidade ao jogo legado Alpha0.
+ * Testes de fidelidade ao EmuladorDeSerHumanoNoJogoDaVelhaByPatrikLimaPereira-Alpha0.
  * Garante que a mecanica e a jogabilidade do jogo atual reproduzem o comportamento
  * do codigo original contido em codigo-ET/.../main.c.
  */
