@@ -14,6 +14,7 @@ docs/resumo.md
 docs/
 logs/
 
+
 *.log
 *.o
 codigo-ET/

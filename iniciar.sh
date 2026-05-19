@@ -6,7 +6,27 @@ fi
 
 set -e
 
-PASTA="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+detectar_pasta_projeto() {
+    local raiz_atual=""
+
+    if command -v git >/dev/null 2>&1; then
+        raiz_atual="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || true)"
+    fi
+
+    if [ -n "$raiz_atual" ] &&
+       [ -f "$raiz_atual/CMakeLists.txt" ] &&
+       [ -f "$raiz_atual/diagram.json" ] &&
+       [ -f "$raiz_atual/iniciar.sh" ]; then
+        printf "%s\n" "$raiz_atual"
+        return
+    fi
+
+    printf "%s\n" "$SCRIPT_DIR"
+}
+
+PASTA="$(detectar_pasta_projeto)"
 LIMPAR=0
 ABRIR_VSCODE=0
 SO_ABRIR_VSCODE=0
@@ -42,6 +62,10 @@ else
     BLUE=""
     MAGENTA=""
     CYAN=""
+fi
+
+if [ "$SCRIPT_DIR" != "$PASTA" ]; then
+    printf "%b\n" "${YELLOW}Aviso:${RESET} script chamado de '$SCRIPT_DIR', usando projeto atual em '$PASTA'."
 fi
 
 linha() {
@@ -287,10 +311,63 @@ mostrar_checklist_wokwi() {
     linha
 }
 
+limpar_build_invalido() {
+    local diretorio="$1"
+    local build_dir="$2"
+    local build_path="$build_dir"
+    local cache=""
+    local origem=""
+    local origem_real=""
+    local diretorio_real=""
+    local build_real=""
+
+    case "$build_path" in
+        /*) ;;
+        *) build_path="$diretorio/$build_path" ;;
+    esac
+
+    cache="$build_path/CMakeCache.txt"
+    if [ ! -f "$cache" ]; then
+        return
+    fi
+
+    origem="$(awk -F= '/^CMAKE_HOME_DIRECTORY:INTERNAL=/{print $2; exit}' "$cache")"
+    if [ -z "$origem" ]; then
+        return
+    fi
+
+    diretorio_real="$(cd "$diretorio" && pwd -P)"
+    if [ -d "$origem" ]; then
+        origem_real="$(cd "$origem" && pwd -P)"
+    else
+        origem_real="$origem"
+    fi
+
+    if [ "$origem_real" = "$diretorio_real" ]; then
+        return
+    fi
+
+    build_real="$(cd "$(dirname "$build_path")" && pwd -P)/$(basename "$build_path")"
+    case "$build_real" in
+        "$diretorio_real"/*) ;;
+        *)
+            printf "%b\n" "${RED}Erro:${RESET} build fora do projeto: $build_real"
+            exit 1
+            ;;
+    esac
+
+    printf "%b\n" "${YELLOW}Aviso:${RESET} build antigo aponta para outro projeto:"
+    printf "%b\n" "  $origem"
+    printf "%b\n" "${CYAN}==>${RESET} Removendo build incompativel: $build_real"
+    rm -rf "$build_real"
+}
+
 garantir_alvo_esp32s3() {
     local diretorio="$1"
     local build_dir="$2"
     local sdkconfig="$diretorio/sdkconfig"
+
+    limpar_build_invalido "$diretorio" "$build_dir"
 
     if [ -f "$sdkconfig" ] && grep -q '^CONFIG_IDF_TARGET="esp32s3"$' "$sdkconfig"; then
         printf "%b\n" "${CYAN}==>${RESET} Alvo ESP32-S3 ja configurado em: $sdkconfig"
@@ -346,8 +423,6 @@ menu() {
                 return
                 ;;
             5)
-                RODAR_TESTES=1
-                COMPILAR_TESTES_C=1
                 ABRIR_VSCODE=1
                 return
                 ;;
@@ -401,8 +476,6 @@ for arg in "$@"; do
             ABRIR_VSCODE=1
             ;;
         simular|wokwi|--simular|--wokwi)
-            RODAR_TESTES=1
-            COMPILAR_TESTES_C=1
             ABRIR_VSCODE=1
             ;;
         somente-vscode|so-vscode|--only-vscode)
@@ -469,7 +542,7 @@ printf "%b\n" "${CYAN}==>${RESET} Carregando ESP-IDF de: $IDF_EXPORT"
 if [ "${CLEAN:-0}" = "1" ] || [ "$LIMPAR" = "1" ]; then
     if [ -d build ]; then
         printf "%b\n" "${CYAN}==>${RESET} Limpando build principal..."
-        idf.py fullclean
+        idf.py -B build fullclean
     else
         printf "%b\n" "${YELLOW}==>${RESET} Nada para limpar: build/ nao existe."
     fi
@@ -489,7 +562,14 @@ fi
 garantir_alvo_esp32s3 "$PASTA" "build"
 
 printf "%b\n" "${CYAN}==>${RESET} Compilando firmware principal..."
-idf.py build
+if ! idf.py -B build build; then
+    printf "%b\n" "${RED}Erro:${RESET} Falha ao compilar o firmware principal."
+    if [ "$ABRIR_VSCODE" = "1" ]; then
+        abrir_vscode
+        printf "%b\n" "${YELLOW}Aviso:${RESET} VS Code aberto para voce corrigir a compilacao antes do Wokwi."
+    fi
+    exit 1
+fi
 
 if [ "$RODAR_TESTES" = "1" ]; then
     printf "%b\n" "${CYAN}==>${RESET} Rodando testes Python..."
