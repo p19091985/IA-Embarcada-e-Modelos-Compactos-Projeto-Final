@@ -301,7 +301,7 @@ static void mostrar_menu(void)
         "A - Jogar       ",
         "B - Placar",
         "C - Sair        ",
-        "D - About",
+        "D - Creditos",
         "0 - Zerar  ",
         "Escolha ",
     };
@@ -376,10 +376,10 @@ static void mostrar_autor(void)
         "  Desenvolvido",
         "      por:",
         " ",
-        " Patrik, Janiel e João",
+        " Patrik, Janiel e Joao",
     };
 
-    exibir_oled_linhas("AUTOR", linhas, 5);
+    exibir_oled_linhas("CREDITOS", linhas, 5);
 }
 
 static void mostrar_placar_zerado(void)

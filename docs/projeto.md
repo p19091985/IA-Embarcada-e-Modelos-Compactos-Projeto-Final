@@ -10,12 +10,12 @@ No boot, o console mostra uma abertura no estilo TensorFlow Lite Micro Hello Wor
 
 ## Funcionalidades
 
-- Menu principal no OLED igual ao legado: `A - Jogar`, `B - Placar`, `C - Sair`, `D - About`, `0 - Zerar`, `Escolha`.
+- Menu principal no OLED igual ao legado: `A - Jogar`, `B - Placar`, `C - Sair`, `D - Creditos`, `0 - Zerar`, `Escolha`.
 - Entrada por teclado matricial 4x4 para menu e selecao de posicoes.
 - Tabuleiro 3x3 no OLED com o formato ` 1 | 2 | 3 ` e separadores `---+---+---`.
 - Modelo TFLite Micro INT8 como unico algoritmo de IA do computador.
 - Relatorios JSON de treino em `ml/relatorios/` com matriz de confusao, contrato INT8, hashes e rastreabilidade do PDF.
-- LCD1602 com linha 1 exibindo `TFLite` e linha 2 rolando `Autores : Janiel e Patrik`.
+- LCD1602 com linha 1 exibindo `TFLite` e linha 2 rolando `Autores: Patrik, Janiel e Joao`.
 - Placar acumulado de vitorias do jogador, vitorias do computador e empates.
 - LED dourado controlado por `*` e `#`, com apoio automatico do LDR enquanto nao houver comando manual.
 - Buzzer para tecla, inicializacao e vitoria.
@@ -29,7 +29,7 @@ No boot, o console mostra uma abertura no estilo TensorFlow Lite Micro Hello Wor
 | `A` | Iniciar partida |
 | `B` | Exibir placar |
 | `C` | Encerrar programa |
-| `D` | Exibir About com `Janiel e Patrik` |
+| `D` | Exibir creditos com `Patrik, Janiel e Joao` |
 | `0` | Zerar placar |
 | `1` a `9` | Selecionar posicao no tabuleiro |
 | `*` | Ligar LED dourado |
@@ -37,7 +37,7 @@ No boot, o console mostra uma abertura no estilo TensorFlow Lite Micro Hello Wor
 
 Modo tecnico: no menu principal, a tecla `9` ativa a coleta CSV bruta do HC-SR04 para diagnostico. Essa opcao nao aparece no menu do OLED para preservar a experiencia do Alpha0.
 
-O About no OLED identifica os autores como `Janiel e Patrik`. No LCD1602, a linha 1 permanece dedicada ao algoritmo de IA atual e a linha 2 rola `Autores : Janiel e Patrik` para a esquerda, em efeito de marquee.
+A tela de creditos no OLED identifica os autores como `Patrik, Janiel e Joao`. No LCD1602, a linha 1 permanece dedicada ao algoritmo de IA atual e a linha 2 rola `Autores: Patrik, Janiel e Joao` para a esquerda, em efeito de marquee.
 
 ## Hardware
 
@@ -86,7 +86,7 @@ As duas pipelines geram `ml/relatorios/tictactoe_training_report.json` e `ml/rel
 - [ ] Teclado 4x4 navega pelos comandos do menu.
 - [ ] Tecla `A` inicia partida.
 - [ ] Teclas `1` a `9` realizam jogadas no tabuleiro.
-- [ ] LCD1602 exibe `TFLite` na linha 1 e a linha 2 rola `Autores : Janiel e Patrik`.
+- [ ] LCD1602 exibe `TFLite` na linha 1 e a linha 2 rola `Autores: Patrik, Janiel e Joao`.
 - [ ] Serial registra a inferencia de presenca do HC-SR04.
 - [ ] Tecla `*` liga o LED dourado.
 - [ ] Tecla `#` desliga o LED dourado.

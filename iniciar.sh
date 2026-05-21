@@ -296,7 +296,7 @@ mostrar_checklist_wokwi() {
     echo "  [ ] Tabuleiro exibe formato com ---+---+---"
     echo "  [ ] Teclas 1 a 9 selecionam posicoes no tabuleiro"
     echo "  [ ] Tecla B exibe o placar"
-    echo "  [ ] Tecla D exibe Patrik, Janiel e Joao no About"
+    echo "  [ ] Tecla D exibe Patrik, Janiel e Joao nos creditos"
     echo "  [ ] LCD1602 exibe TFLite na linha 1 e autores rolando na linha 2"
     echo "  [ ] Tecla * liga o LED dourado"
     echo "  [ ] Tecla # desliga o LED dourado"
