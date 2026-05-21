@@ -9,14 +9,12 @@ codigo/
 .codex
 .codex/
 .vscode/
-docs/projeto.md
-docs/resumo.md
-docs/*
-docs
+# docs: permite subir apenas arquivos .png
+docs/**
 !docs/
-!docs/diagramas/
-!docs/diagramas/*.drawio
-!docs/diagramas/*.png
+!docs/**/
+!docs/*.png
+!docs/**/*.png
 logs/*
 !logs/
 !logs/jogo_auditoria.log
@@ -75,6 +73,3 @@ managed_components/
 dependencies.lock
 
 *.dwo
-
-# Ignora todos os arquivos dentro de docs/
-docs/**
