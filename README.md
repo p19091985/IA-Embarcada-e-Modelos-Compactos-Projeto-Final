@@ -109,6 +109,15 @@ O projeto implementa **duas pipelines TinyML completas**, cada uma seguindo o ci
 </p>
 
 
+### 🧠 Arquiteturas das Redes Neurais TFLite
+
+Os dois modelos embarcados usam redes compactas quantizadas para INT8. O modelo do jogo usa duas camadas ocultas com **ReLU** e uma saída linear em logits para pontuar as 9 casas do tabuleiro. O modelo de presença usa uma camada densa linear em logits para comparar `AUSENTE` e `PRESENTE`.
+
+<p align="center">
+  <img src="docs/diagramas/redes_neurais_tflite.png" alt="Arquiteturas das redes neurais TFLite do jogo da velha e da presença" />
+</p>
+
+
 ### 🎯 Modelo do Jogo da Velha
 
 Recebe o estado do tabuleiro como tensor de 9 posições e retorna scores para cada casa. O firmware aplica máscara nas casas ocupadas e seleciona a melhor posição disponível.
