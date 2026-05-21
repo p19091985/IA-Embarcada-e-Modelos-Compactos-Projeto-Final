@@ -90,7 +90,6 @@ Testes      pytest (host) · Unity Framework (embarcado)
   <img src="docs/diagramas/arquitetura_alto_nivel.png" alt="Arquitetura de alto nível do firmware ESP32-S3" />
 </p>
 
-<p align="center"><sub>Fonte editável: <a href="docs/diagramas/arquitetura_alto_nivel.drawio">docs/diagramas/arquitetura_alto_nivel.drawio</a></sub></p>
 
 ### Fluxo de Dados — Inferência do Jogo
 
@@ -98,7 +97,6 @@ Testes      pytest (host) · Unity Framework (embarcado)
   <img src="docs/diagramas/fluxo_inferencia_jogo.png" alt="Fluxo de inferência do jogo da velha" />
 </p>
 
-<p align="center"><sub>Fonte editável: <a href="docs/diagramas/fluxo_inferencia_jogo.drawio">docs/diagramas/fluxo_inferencia_jogo.drawio</a></sub></p>
 
 ---
 
@@ -110,7 +108,6 @@ O projeto implementa **duas pipelines TinyML completas**, cada uma seguindo o ci
   <img src="docs/diagramas/pipeline_ia.png" alt="Pipeline TinyML do projeto" />
 </p>
 
-<p align="center"><sub>Fonte editável: <a href="docs/diagramas/pipeline_ia.drawio">docs/diagramas/pipeline_ia.drawio</a></sub></p>
 
 ### 🎯 Modelo do Jogo da Velha
 
@@ -209,7 +206,6 @@ Os relatórios registram métricas float e INT8, matrizes de confusão, SHA-256 
   <img src="docs/diagramas/barramentos_protocolos.png" alt="Barramentos e protocolos do hardware" />
 </p>
 
-<p align="center"><sub>Fonte editável: <a href="docs/diagramas/barramentos_protocolos.drawio">docs/diagramas/barramentos_protocolos.drawio</a></sub></p>
 
 ---
 
@@ -518,7 +514,6 @@ Cada pipeline executa: **dataset → Keras → TFLite float → quantização IN
   <img src="docs/diagramas/decisoes_arquiteturais.png" alt="Decisões arquiteturais do firmware" />
 </p>
 
-<p align="center"><sub>Fonte editável: <a href="docs/diagramas/decisoes_arquiteturais.drawio">docs/diagramas/decisoes_arquiteturais.drawio</a></sub></p>
 
 ### Limitações Conhecidas
 
@@ -549,7 +544,6 @@ O sistema utiliza **dois sensores físicos** em operação contínua no ESP32-S3
   <img src="docs/diagramas/sensores_tempo_real.png" alt="Fluxo dos sensores em tempo real" />
 </p>
 
-<p align="center"><sub>Fonte editável: <a href="docs/diagramas/sensores_tempo_real.drawio">docs/diagramas/sensores_tempo_real.drawio</a></sub></p>
 
 - O HC-SR04 opera em uma **task FreeRTOS dedicada** (`task_presenca_ambiente`), medindo distância e eco a cada 1 segundo — sem interferir no fluxo do jogo
 - O LDR é lido no loop principal e aciona iluminação automática com histerese configurável
@@ -631,7 +625,6 @@ Ambos os modelos passam por um pipeline de **conversão e compressão** antes de
   <img src="docs/diagramas/pipeline_quantizacao.png" alt="Pipeline de conversão e quantização" />
 </p>
 
-<p align="center"><sub>Fonte editável: <a href="docs/diagramas/pipeline_quantizacao.drawio">docs/diagramas/pipeline_quantizacao.drawio</a></sub></p>
 
 | Modelo | Float | INT8 | Redução | Quantização |
 | :--- | ---: | ---: | ---: | :--- |
@@ -669,7 +662,6 @@ O ESP32-S3 executa **duas pipelines de inferência completas** localmente, desde
   <img src="docs/diagramas/fluxo_tflite_jogo.png" alt="Fluxo TFLite do jogo da velha" />
 </p>
 
-<p align="center"><sub>Fonte editável: <a href="docs/diagramas/fluxo_tflite_jogo.drawio">docs/diagramas/fluxo_tflite_jogo.drawio</a></sub></p>
 
 1. O tabuleiro é lido da estrutura `jogo_estado_t` em `main.c`
 2. Cada posição é codificada: `X → 1`, `O → −1`, vazio → `0`
@@ -684,7 +676,6 @@ O ESP32-S3 executa **duas pipelines de inferência completas** localmente, desde
   <img src="docs/diagramas/fluxo_tflite_presenca.png" alt="Fluxo TFLite de presença" />
 </p>
 
-<p align="center"><sub>Fonte editável: <a href="docs/diagramas/fluxo_tflite_presenca.drawio">docs/diagramas/fluxo_tflite_presenca.drawio</a></sub></p>
 
 1. O HC-SR04 é acionado pela task FreeRTOS `presenca_hcsr04` a cada 1 segundo
 2. O tempo de eco é convertido em distância (cm) pelo driver `hcsr04.c`
