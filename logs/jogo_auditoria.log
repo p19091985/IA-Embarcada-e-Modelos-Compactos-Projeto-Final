@@ -1,0 +1,27 @@
+# Log de Auditoria do Jogo da Velha
+#
+# O firmware emite linhas com a tag JOGO_AUDIT no monitor serial.
+# Este arquivo e alimentado automaticamente por:
+#   ./iniciar.sh auditoria
+#   ./iniciar.sh monitor
+#   ./iniciar.sh simular-auditoria
+# ou manualmente por:
+#   idf.py monitor | tee -a logs/jogo_auditoria.log
+
+# ==================================================================
+# Sessao de auditoria iniciada em 2026-05-21 15:44:42 -0300
+# Comando: ./iniciar.sh monitor
+# ==================================================================
+
+# ==================================================================
+# Sessao de auditoria iniciada em 2026-05-21 15:47:36 -0300
+# Comando: ./iniciar.sh simular-auditoria
+# ==================================================================
+
+# ==================================================================
+# Sessao de auditoria iniciada em 2026-05-21 15:47:37 -0300
+# Comando: ./iniciar.sh simular-auditoria
+# ==================================================================
+# Modo Wokwi: execute Wokwi: Start Simulator no VS Code.
+# O firmware ja emite JOGO_AUDIT no Serial Monitor do simulador.
+# Se a extensao nao expuser pipe serial, copie as linhas JOGO_AUDIT para esta sessao.

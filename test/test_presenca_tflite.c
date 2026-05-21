@@ -72,7 +72,17 @@ void test_presenca_tflite_classifica_amostra_distante(void)
     TEST_ASSERT_FALSE(presenca_tflite_classificar(&modelo, 250, 250 * 58));
 }
 
-void test_presenca_tflite_rejeita_distancias_invalidas_antes_da_inferencia(void)
+void test_presenca_tflite_score_usa_saida_int8_do_modelo(void)
+{
+    presenca_tflite_t modelo;
+
+    TEST_ASSERT_EQUAL(ESP_OK, presenca_tflite_iniciar(&modelo));
+    TEST_ASSERT_TRUE(presenca_tflite_classificar(&modelo, 40, 40 * 58));
+    TEST_ASSERT_GREATER_THAN_INT32(0, modelo.ultimo_score);
+    TEST_ASSERT_LESS_OR_EQUAL_INT32(255, modelo.ultimo_score);
+}
+
+void test_presenca_tflite_classifica_ausencia_nas_fronteiras(void)
 {
     presenca_tflite_t modelo;
 

@@ -146,9 +146,7 @@ bool presenca_tflite_classificar(presenca_tflite_t *modelo, uint16_t distancia_c
     int32_t score_compacto = presenca_modelo_compacto_score(distancia_cm, eco_us);
     bool presente_compacto = score_compacto >= 0;
 
-    if (distancia_cm < PRESENCA_MODEL_DISTANCIA_MIN_PRESENTE_CM ||
-        distancia_cm >= PRESENCA_MODEL_DISTANCIA_AUSENTE_A_PARTIR_CM ||
-        distancia_cm > PRESENCA_MODEL_DISTANCIA_MAX_CM) {
+    if (distancia_cm > PRESENCA_MODEL_DISTANCIA_MAX_CM) {
         if (modelo != NULL) {
             modelo->ultimo_score = score_compacto;
         }
@@ -173,8 +171,9 @@ bool presenca_tflite_classificar(presenca_tflite_t *modelo, uint16_t distancia_c
         return presente_compacto;
     }
 
-    modelo->ultimo_score = score_compacto;
-    return presente_compacto;
+    int32_t score_tflite = (int32_t)saida_tflite->data.int8[1] - (int32_t)saida_tflite->data.int8[0];
+    modelo->ultimo_score = score_tflite;
+    return saida_tflite->data.int8[1] > saida_tflite->data.int8[0];
 }
 
 presenca_tflite_resultado_t presenca_tflite_avaliar_leitura_hcsr04(presenca_tflite_t *modelo,

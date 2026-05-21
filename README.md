@@ -128,16 +128,16 @@ Recebe o estado do tabuleiro como tensor de 9 posições e retorna scores para c
 
 ### 📡 Modelo de Presença
 
-Classifica `PRESENTE`/`AUSENTE` com base na distância (cm) e tempo de eco (µs) do HC-SR04. Quando o jogador é classificado como ausente, o sistema bloqueia automaticamente o teclado.
+Classifica `PRESENTE`/`AUSENTE` com base na distância (cm) e tempo de eco (µs) do HC-SR04. A decisão final usa a saída INT8 do modelo TFLite embarcado; o classificador compacto fica apenas como fallback quando o runtime TFLite não está disponível ou a leitura está fora da faixa física válida. Quando o jogador é classificado como ausente, o sistema bloqueia automaticamente o teclado.
 
 | Especificação | Valor |
 | :--- | :--- |
 | **Pipeline** | `ml/pipeline_presenca.py` |
 | **Dataset** | `ml/datasets/presenca_hcsr04.csv` — **1775** amostras (1435 ausente / 340 presente) |
-| **Arquitetura** | `Input(2) → Dense(2)` + classificador compacto calibrado |
+| **Arquitetura** | `Input(2) → Dense(2)` |
 | **Faixa PRESENTE** | 2 a 69 cm (≥ 70 cm = AUSENTE) |
 | **Tamanho INT8** | **1336 bytes** (1.3 KB) |
-| **Acurácia INT8** | **100%** (classificador compacto calibrado no dataset completo) |
+| **Acurácia INT8** | **100%** no conjunto de validação |
 | **Arena** | 8192 bytes |
 
 <details>
@@ -220,7 +220,7 @@ Os relatórios registram métricas float e INT8, matrizes de confusão, SHA-256 
 | **Auditoria** | `jogo_auditoria.*` | Serialização do tabuleiro, análise de resultado e linha vencedora |
 | **Interação** | `jogo_interface.*` | Bloqueio de teclado por presença, formatação de LCD stats |
 | **IA Jogo** | `ia_tflite.*` · `ia_jogo_da_velha.*` | Inferência INT8, máscara de ocupadas |
-| **IA Presença** | `presenca_tflite.*` | Classificação HC-SR04 → TFLite + compacto calibrado |
+| **IA Presença** | `presenca_tflite.*` | Classificação HC-SR04 → TFLite INT8, com fallback compacto |
 | **Sensores** | `hcsr04.*` · `ldr.*` | Distância/eco, luminosidade com histerese |
 | **Interface** | `ssd1306_i2c.*` · `lcd1602_i2c.*` · `ili9341_spi.*` · `teclado_matricial.*` | OLED, TFT ILI9341 (SPI), LCDs, teclado |
 | **Gráficos** | `fonte_8x8.h` | Fonte bitmap 8×8 para renderização no ILI9341 |
@@ -272,7 +272,7 @@ Modelos ficam em flash como `const` arrays. Arenas estáticas:
 ├── main/                            # Firmware ESP-IDF (C/C++)
 │   ├── main.c                       #   Ponto de entrada, integração e auditoria
 │   ├── ia_tflite.cc/.h              #   Inferência TFLite do jogo
-│   ├── presenca_tflite.cc/.h        #   Classificador de presença (TFLite + compacto)
+│   ├── presenca_tflite.cc/.h        #   Classificador de presença TFLite INT8
 │   ├── jogo_auditoria.c/.h          #   Audit trail: serialização, análise e linha vencedora
 │   ├── jogo_interface.c/.h          #   Bloqueio por presença + formatação LCD stats
 │   ├── tictactoe_model_data.h       #   Modelo INT8 do jogo (array C)
@@ -495,14 +495,14 @@ Cada pipeline executa: **dataset → Keras → TFLite float → quantização IN
 
 #### 📡 Modelo de Presença
 
-| Métrica | Float | INT8 (compacto) | Δ |
+| Métrica | Float | INT8 | Δ |
 | :--- | ---: | ---: | ---: |
 | Acurácia | 98.87% | **100%** | +1.13% |
 | Tamanho | 1.1 KB | **1.3 KB** | +18%* |
 | Faixa PRESENTE | — | **2–69 cm** | — |
 
 <sub>* Normal em modelos muito pequenos — metadados de quantização pesam proporcionalmente mais.</sub>
-<sub>O classificador compacto calibrado atinge 100% de acurácia no dataset completo de 1775 amostras.</sub>
+<sub>O firmware usa a saída do modelo TFLite INT8 para decidir `PRESENTE`/`AUSENTE`; o compacto permanece apenas como fallback operacional.</sub>
 
 </td>
 </tr>
@@ -521,7 +521,7 @@ Cada pipeline executa: **dataset → Keras → TFLite float → quantização IN
 > - Validação de consumo elétrico e temporização física depende de teste em hardware real
 > - No Wokwi, o sistema é funcional, compilável e rastreável
 > - O dataset do jogo usa jogadas geradas por minimax offline — o minimax **não é executado** no firmware
-> - A acurácia de 100% do classificador de presença reflete o classificador compacto calibrado; o modelo TFLite real pode apresentar leve variação com dados de campo
+> - A acurácia de 100% do classificador de presença reflete o modelo INT8 no conjunto de validação; dados de campo podem variar conforme ruído do HC-SR04 e montagem física
 
 ---
 
@@ -592,10 +592,11 @@ O projeto treina **dois modelos independentes** com datasets próprios, utilizan
 | Script | `ml/pipeline_presenca.py` |
 | Dataset | Próprio — 1775 amostras (1435/340) |
 | Features | `distancia_cm`, `eco_us` |
-| Arquitetura | `Input(2) → Dense(2)` + compacto calibrado |
+| Arquitetura | `Input(2) → Dense(2)` |
 | Faixa PRESENTE | 2–69 cm (≥ 70 cm = AUSENTE) |
 | Classes | AUSENTE (0), PRESENTE (1) |
-| Acurácia compacto | **100%** no dataset completo |
+| Decisão embarcada | `saida[PRESENTE] > saida[AUSENTE]` |
+| Score no LCD | `saida[PRESENTE] - saida[AUSENTE]` |
 
 </td>
 </tr>
@@ -672,6 +673,12 @@ O ESP32-S3 executa **duas pipelines de inferência completas** localmente, desde
 
 #### Pipeline de Inferência de Presença
 
+```text
+Pipeline de presença:
+HC-SR04 -> ESP32 -> TFLite -> LCD
+PRESENTE/AUSENTE, distancia e score.
+```
+
 <p align="center">
   <img src="docs/diagramas/fluxo_tflite_presenca.png" alt="Fluxo TFLite de presença" />
 </p>
@@ -681,8 +688,9 @@ O ESP32-S3 executa **duas pipelines de inferência completas** localmente, desde
 2. O tempo de eco é convertido em distância (cm) pelo driver `hcsr04.c`
 3. `distancia_cm` e `eco_us` são normalizados e quantizados para INT8
 4. O interpreter TFLite Micro executa a classificação em `presenca_tflite.cc`
-5. A saída indica `PRESENTE` (classe 1) ou `AUSENTE` (classe 0) com score de confiança
-6. O resultado é exibido no LCD dedicado e registrado no console serial
+5. A saída possui duas posições: `AUSENTE` (classe 0) e `PRESENTE` (classe 1)
+6. O firmware calcula `score = saida[PRESENTE] - saida[AUSENTE]` e decide `PRESENTE` quando `saida[PRESENTE] > saida[AUSENTE]`
+7. O resultado é exibido no LCD dedicado e registrado no console serial
 
 > [!IMPORTANT]
 > **Evidências no repositório:**

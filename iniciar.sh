@@ -644,6 +644,7 @@ fi
 
 if [ "$RODAR_TESTES" = "1" ]; then
     printf "%b\n" "${CYAN}==>${RESET} Rodando testes Python..."
+    preparar_log_auditoria "${AUDITORIA_COMANDO:-./iniciar.sh testar}"
     "$PYTHON_BIN" -m pytest test/test_diagram_json.py test/test_pipeline_tictactoe.py test/test_pipeline_presenca.py test/test_requisitos_sistema.py
 fi
 
