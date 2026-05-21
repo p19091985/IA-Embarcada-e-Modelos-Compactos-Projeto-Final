@@ -82,7 +82,7 @@ uso() {
     echo "  ./iniciar.sh simular         igual a vscode, com checklist para Wokwi"
     echo "  ./iniciar.sh unity           compila apenas o app Unity/ESP-IDF em test/build_tests"
     echo "  ./iniciar.sh flash-testes    grava e abre monitor serial do app Unity"
-    echo "  ./iniciar.sh setup           verifica e instala dependencias (ESP-IDF, pytest)"
+    echo "  ./iniciar.sh setup           verifica e instala dependencias Python/ESP-IDF"
     echo "  ./iniciar.sh limpar validar  limpa build principal e executa validacao"
     echo "  CLEAN=1 ./iniciar.sh build   limpa com idf.py fullclean antes do build"
 }
@@ -296,7 +296,7 @@ mostrar_checklist_wokwi() {
     echo "  [ ] Tabuleiro exibe formato com ---+---+---"
     echo "  [ ] Teclas 1 a 9 selecionam posicoes no tabuleiro"
     echo "  [ ] Tecla B exibe o placar"
-    echo "  [ ] Tecla D exibe Patrik, Janiel e Joao no About"
+    echo "  [ ] Tecla D exibe Patrik, Janiel e Joao nos creditos"
     echo "  [ ] LCD1602 exibe TFLite na linha 1 e autores rolando na linha 2"
     echo "  [ ] Tecla * liga o LED dourado"
     echo "  [ ] Tecla # desliga o LED dourado"
