@@ -116,7 +116,7 @@ echo   iniciar.bat vscode          compila e abre o projeto no VS Code
 echo   iniciar.bat simular         igual a vscode, com checklist para Wokwi
 echo   iniciar.bat unity           compila apenas o app Unity/ESP-IDF
 echo   iniciar.bat flash-testes    grava e abre monitor serial do app Unity
-echo   iniciar.bat setup           verifica e instala dependencias
+echo   iniciar.bat setup           verifica e instala dependencias Python/ESP-IDF
 echo   iniciar.bat limpar validar  limpa build e executa validacao
 echo.
 goto :fim
@@ -369,8 +369,9 @@ if exist "%SDK_ALVO%" (
 echo ==^> Configurando alvo ESP32-S3 em: %DIR_ALVO%
 pushd "%DIR_ALVO%"
 idf.py -B "%BUILD_ALVO%" set-target esp32s3
+set "CMD_STATUS=%ERRORLEVEL%"
 popd
-exit /b 0
+exit /b %CMD_STATUS%
 
 :: ============================================================================
 :: Abrir VS Code
@@ -430,7 +431,7 @@ call :encontrar_python
 if errorlevel 1 (
     echo [ERRO] Python3 nao encontrado.
     echo Instale o Python 3 de https://www.python.org/downloads/
-    goto :fim
+    goto :fim_erro
 )
 
 :: Garantir venv se vai rodar testes
@@ -438,7 +439,7 @@ if "%RODAR_TESTES%"=="1" (
     call :garantir_venv
     if errorlevel 1 (
         echo [ERRO] Falha ao preparar ambiente virtual.
-        goto :fim
+        goto :fim_erro
     )
 )
 
@@ -449,7 +450,7 @@ if errorlevel 1 (
     echo Rode "iniciar.bat setup" para ver instrucoes de instalacao,
     echo ou defina a variavel de ambiente:
     echo   set IDF_PATH=C:\caminho\para\esp-idf
-    goto :fim
+    goto :fim_erro
 )
 
 :: Somente abrir VS Code
@@ -462,6 +463,10 @@ if "%SO_ABRIR_VSCODE%"=="1" (
 :: Carregar ESP-IDF
 echo ==^> Carregando ESP-IDF de: %IDF_EXPORT%
 call "%IDF_EXPORT%"
+if errorlevel 1 (
+    echo [ERRO] Falha ao carregar o ambiente do ESP-IDF.
+    goto :fim_erro
+)
 
 :: Limpar se solicitado
 if "%LIMPAR%"=="1" (
@@ -469,7 +474,12 @@ if "%LIMPAR%"=="1" (
         echo ==^> Limpando build principal...
         pushd "%PASTA%"
         idf.py fullclean
+        set "CMD_STATUS=!ERRORLEVEL!"
         popd
+        if not "!CMD_STATUS!"=="0" (
+            echo [ERRO] idf.py fullclean falhou.
+            goto :fim_erro
+        )
     ) else (
         echo ==^> Nada para limpar: build\ nao existe.
     )
@@ -479,35 +489,73 @@ if "%LIMPAR%"=="1" (
 if "%FLASH_TESTES_C%"=="1" (
     echo ==^> Preparando app Unity/ESP-IDF...
     call :garantir_alvo "%PASTA%\test" "build_tests"
+    if errorlevel 1 (
+        echo [ERRO] Falha ao configurar o alvo ESP32-S3 para os testes C.
+        goto :fim_erro
+    )
     pushd "%PASTA%\test"
     idf.py -B build_tests build
+    set "CMD_STATUS=!ERRORLEVEL!"
+    if not "!CMD_STATUS!"=="0" (
+        popd
+        echo [ERRO] idf.py -B build_tests build falhou.
+        goto :fim_erro
+    )
     idf.py -B build_tests flash monitor
+    set "CMD_STATUS=!ERRORLEVEL!"
     popd
+    if not "!CMD_STATUS!"=="0" (
+        echo [ERRO] idf.py -B build_tests flash monitor falhou.
+        goto :fim_erro
+    )
     goto :fim
 )
 
 :: Build principal
-pushd "%PASTA%"
 call :garantir_alvo "%PASTA%" "build"
+if errorlevel 1 (
+    echo [ERRO] Falha ao configurar o alvo ESP32-S3 para o firmware principal.
+    goto :fim_erro
+)
+pushd "%PASTA%"
 echo ==^> Compilando firmware principal...
 idf.py build
+set "CMD_STATUS=%ERRORLEVEL%"
 popd
+if not "%CMD_STATUS%"=="0" (
+    echo [ERRO] idf.py build falhou para o firmware principal.
+    goto :fim_erro
+)
 
 :: Testes Python
 if "%RODAR_TESTES%"=="1" (
     echo ==^> Rodando testes Python...
     pushd "%PASTA%"
     "%PYTHON_BIN%" -m pytest test\test_diagram_json.py test\test_pipeline_tictactoe.py test\test_pipeline_presenca.py test\test_requisitos_sistema.py
+    set "CMD_STATUS=!ERRORLEVEL!"
     popd
+    if not "!CMD_STATUS!"=="0" (
+        echo [ERRO] pytest falhou.
+        goto :fim_erro
+    )
 )
 
 :: Testes Unity C
 if "%COMPILAR_TESTES_C%"=="1" (
     echo ==^> Compilando app Unity/ESP-IDF dos testes C...
     call :garantir_alvo "%PASTA%\test" "build_tests"
+    if errorlevel 1 (
+        echo [ERRO] Falha ao configurar o alvo ESP32-S3 para os testes C.
+        goto :fim_erro
+    )
     pushd "%PASTA%\test"
     idf.py -B build_tests build
+    set "CMD_STATUS=!ERRORLEVEL!"
     popd
+    if not "!CMD_STATUS!"=="0" (
+        echo [ERRO] idf.py -B build_tests build falhou.
+        goto :fim_erro
+    )
 )
 
 :: Abrir VS Code
@@ -537,3 +585,7 @@ if "%ABRIR_VSCODE%"=="1" (
 :fim
 endlocal
 exit /b 0
+
+:fim_erro
+endlocal
+exit /b 1
