@@ -116,7 +116,7 @@ echo   iniciar.bat vscode          compila e abre o projeto no VS Code
 echo   iniciar.bat simular         igual a vscode, com checklist para Wokwi
 echo   iniciar.bat unity           compila apenas o app Unity/ESP-IDF
 echo   iniciar.bat flash-testes    grava e abre monitor serial do app Unity
-echo   iniciar.bat setup           verifica e instala dependencias Python/ESP-IDF
+echo   iniciar.bat setup           verifica dependencias
 echo   iniciar.bat limpar validar  limpa build e executa validacao
 echo.
 goto :fim
@@ -128,7 +128,7 @@ goto :fim
 :menu
 cls
 echo ------------------------------------------------------------
-echo   === Painel de Controle: Jogo da Velha (Patrik, Janiel e Joao) ===
+echo   === Painel de Controle: Jogo da Velha (Janiel, Joao e Patrik) ===
 echo ------------------------------------------------------------
 echo   1) Compilar firmware principal
 echo   2) Limpar tudo e compilar firmware
@@ -177,13 +177,17 @@ if errorlevel 1 (
     echo   [OK] Python: !PY_VER!
 )
 
-:: venv e pytest
+:: pytest
 if defined PYTHON_BIN (
     call :garantir_venv
     if errorlevel 1 (
-        echo   [X] Falha ao configurar ambiente virtual
+        echo   [X] pytest indisponivel
     ) else (
-        echo   [OK] venv: %VENV_DIR%
+        if /i "%PYTHON_BIN%"=="%VENV_DIR%\Scripts\python.exe" (
+            echo   [OK] .venv existente: %VENV_DIR%
+        ) else (
+            echo   [OK] Python para testes: %PYTHON_BIN%
+        )
         for /f "tokens=*" %%v in ('"%PYTHON_BIN%" -m pytest --version 2^>^&1') do set "PT_VER=%%v"
         echo   [OK] pytest: !PT_VER!
     )
@@ -252,7 +256,7 @@ if not errorlevel 1 (
 exit /b 1
 
 :: ============================================================================
-:: Garantir venv com pytest
+:: Encontrar pytest sem criar .venv
 :: ============================================================================
 
 :garantir_venv
@@ -264,37 +268,29 @@ if exist "%VENV_DIR%\Scripts\python.exe" (
     )
 )
 
-:: Encontra python base do sistema
-set "PY_BASE="
 where python >nul 2>&1
-if not errorlevel 1 (set "PY_BASE=python") else (
-    where python3 >nul 2>&1
-    if not errorlevel 1 (set "PY_BASE=python3") else (exit /b 1)
-)
-
-if not exist "%VENV_DIR%\Scripts\python.exe" (
-    echo ==^> Criando ambiente virtual em .venv\...
-    "%PY_BASE%" -m venv "%VENV_DIR%"
-    if errorlevel 1 (
-        echo [ERRO] Falha ao criar venv.
-        exit /b 1
+if not errorlevel 1 (
+    python -m pytest --version >nul 2>&1
+    if not errorlevel 1 (
+        set "PYTHON_BIN=python"
+        exit /b 0
     )
 )
 
-set "PYTHON_BIN=%VENV_DIR%\Scripts\python.exe"
-
-if exist "%PASTA%\requirements.txt" (
-    echo ==^> Instalando dependencias Python na .venv\...
-    "%PYTHON_BIN%" -m pip install --upgrade pip >nul 2>&1
-    "%PYTHON_BIN%" -m pip install -r "%PASTA%\requirements.txt" >nul 2>&1
-    if errorlevel 1 (
-        echo [ERRO] Falha ao instalar requirements.txt
-        exit /b 1
+where python3 >nul 2>&1
+if not errorlevel 1 (
+    python3 -m pytest --version >nul 2>&1
+    if not errorlevel 1 (
+        set "PYTHON_BIN=python3"
+        exit /b 0
     )
 )
 
-echo ==^> Ambiente virtual pronto.
-exit /b 0
+echo [ERRO] pytest nao encontrado.
+echo Use uma .venv ja existente com pytest ou instale no Python atual:
+echo   %PYTHON_BIN% -m pip install -r requirements.txt
+echo O script nao cria .venv automaticamente.
+exit /b 1
 
 :: ============================================================================
 :: Encontrar ESP-IDF
@@ -327,16 +323,6 @@ for %%p in (!CAMINHOS_IDF!) do (
     )
 )
 
-:: Procura em subpastas de C:\esp (instalacao via EIM, ex: C:\esp\v6.0.1\esp-idf)
-if exist "C:\esp" (
-    for /d %%v in ("C:\esp\*") do (
-        if exist "%%v\esp-idf\export.bat" (
-            set "IDF_EXPORT=%%v\esp-idf\export.bat"
-            exit /b 0
-        )
-    )
-)
-
 :: Procura em subpastas de .espressif
 if exist "%USERPROFILE%\.espressif" (
     for /d %%d in ("%USERPROFILE%\.espressif\*") do (
@@ -353,10 +339,38 @@ exit /b 1
 :: Garantir alvo ESP32-S3
 :: ============================================================================
 
+:limpar_build_incompativel
+set "DIR_ALVO=%~1"
+set "BUILD_ALVO=%~2"
+set "BUILD_PATH=%DIR_ALVO%\%BUILD_ALVO%"
+set "CACHE_ALVO=%BUILD_PATH%\CMakeCache.txt"
+set "ORIGEM_BUILD="
+set "DIR_ALVO_NORM=%DIR_ALVO:\=/%"
+
+if not exist "%CACHE_ALVO%" exit /b 0
+
+for /f "usebackq tokens=1,* delims==" %%a in (`findstr /b /c:"CMAKE_HOME_DIRECTORY:INTERNAL=" "%CACHE_ALVO%"`) do (
+    set "ORIGEM_BUILD=%%b"
+)
+
+if defined ORIGEM_BUILD (
+    set "ORIGEM_BUILD_NORM=!ORIGEM_BUILD:\=/!"
+    if /i not "!ORIGEM_BUILD_NORM!"=="!DIR_ALVO_NORM!" (
+        echo ==^> Build antigo detectado em: !BUILD_PATH!
+        echo     Era de: !ORIGEM_BUILD!
+        echo ==^> Limpando para reconfigurar neste caminho...
+        rmdir /s /q "!BUILD_PATH!"
+    )
+)
+
+exit /b 0
+
 :garantir_alvo
 set "DIR_ALVO=%~1"
 set "BUILD_ALVO=%~2"
 set "SDK_ALVO=%DIR_ALVO%\sdkconfig"
+
+call :limpar_build_incompativel "%DIR_ALVO%" "%BUILD_ALVO%"
 
 if exist "%SDK_ALVO%" (
     findstr /c:"CONFIG_IDF_TARGET=\"esp32s3\"" "%SDK_ALVO%" >nul 2>&1
@@ -369,9 +383,8 @@ if exist "%SDK_ALVO%" (
 echo ==^> Configurando alvo ESP32-S3 em: %DIR_ALVO%
 pushd "%DIR_ALVO%"
 idf.py -B "%BUILD_ALVO%" set-target esp32s3
-set "CMD_STATUS=%ERRORLEVEL%"
 popd
-exit /b %CMD_STATUS%
+exit /b 0
 
 :: ============================================================================
 :: Abrir VS Code
@@ -405,14 +418,14 @@ echo     [ ] Tecla A inicia a partida por teclado
 echo     [ ] Tabuleiro exibe formato com ---+---+---
 echo     [ ] Teclas 1 a 9 selecionam posicoes no tabuleiro
 echo     [ ] Tecla B exibe o placar
-echo     [ ] Tecla D exibe Patrik, Janiel e Joao nos creditos
-echo     [ ] LCD1602 exibe TFLite na linha 1 e autores rolando na linha 2
+echo     [ ] Tecla D exibe Janiel, Joao e Patrik no About
+echo     [ ] LCD1602 IA exibe TFLite na linha 1 e autores rolando na linha 2
+echo     [ ] LCD1602 presenca exibe PRESENTE/AUSENTE, distancia e score
+echo     [ ] LCD1602 estatisticas exibe tempo, jogadas e media
 echo     [ ] Tecla * liga o LED dourado
 echo     [ ] Tecla # desliga o LED dourado
 echo     [ ] LDR liga automaticamente o LED dourado no escuro
-echo     [ ] Serial registra inferencia de presenca do HC-SR04
-echo     [ ] Tecla 9 ativa a coleta CSV opcional do HC-SR04
-echo     [ ] Serial exibe timestamp_ms,distancia_cm,eco_us,label
+echo     [ ] Serial registra inferencia de presenca do HC-SR04 sempre ativa
 echo     [ ] Buzzer toca nas teclas, inicializacao e vitoria
 echo     [ ] Partida encerra com vitoria do jogador
 echo     [ ] Partida encerra com vitoria do computador
@@ -431,15 +444,15 @@ call :encontrar_python
 if errorlevel 1 (
     echo [ERRO] Python3 nao encontrado.
     echo Instale o Python 3 de https://www.python.org/downloads/
-    goto :fim_erro
+    goto :fim
 )
 
-:: Garantir venv se vai rodar testes
+:: Garantir pytest se vai rodar testes
 if "%RODAR_TESTES%"=="1" (
     call :garantir_venv
     if errorlevel 1 (
-        echo [ERRO] Falha ao preparar ambiente virtual.
-        goto :fim_erro
+        echo [ERRO] Nao foi possivel rodar os testes Python.
+        goto :fim
     )
 )
 
@@ -450,7 +463,7 @@ if errorlevel 1 (
     echo Rode "iniciar.bat setup" para ver instrucoes de instalacao,
     echo ou defina a variavel de ambiente:
     echo   set IDF_PATH=C:\caminho\para\esp-idf
-    goto :fim_erro
+    goto :fim
 )
 
 :: Somente abrir VS Code
@@ -463,23 +476,15 @@ if "%SO_ABRIR_VSCODE%"=="1" (
 :: Carregar ESP-IDF
 echo ==^> Carregando ESP-IDF de: %IDF_EXPORT%
 call "%IDF_EXPORT%"
-if errorlevel 1 (
-    echo [ERRO] Falha ao carregar o ambiente do ESP-IDF.
-    goto :fim_erro
-)
 
 :: Limpar se solicitado
 if "%LIMPAR%"=="1" (
+    call :limpar_build_incompativel "%PASTA%" "build"
     if exist "%PASTA%\build" (
         echo ==^> Limpando build principal...
         pushd "%PASTA%"
         idf.py fullclean
-        set "CMD_STATUS=!ERRORLEVEL!"
         popd
-        if not "!CMD_STATUS!"=="0" (
-            echo [ERRO] idf.py fullclean falhou.
-            goto :fim_erro
-        )
     ) else (
         echo ==^> Nada para limpar: build\ nao existe.
     )
@@ -489,73 +494,35 @@ if "%LIMPAR%"=="1" (
 if "%FLASH_TESTES_C%"=="1" (
     echo ==^> Preparando app Unity/ESP-IDF...
     call :garantir_alvo "%PASTA%\test" "build_tests"
-    if errorlevel 1 (
-        echo [ERRO] Falha ao configurar o alvo ESP32-S3 para os testes C.
-        goto :fim_erro
-    )
     pushd "%PASTA%\test"
     idf.py -B build_tests build
-    set "CMD_STATUS=!ERRORLEVEL!"
-    if not "!CMD_STATUS!"=="0" (
-        popd
-        echo [ERRO] idf.py -B build_tests build falhou.
-        goto :fim_erro
-    )
     idf.py -B build_tests flash monitor
-    set "CMD_STATUS=!ERRORLEVEL!"
     popd
-    if not "!CMD_STATUS!"=="0" (
-        echo [ERRO] idf.py -B build_tests flash monitor falhou.
-        goto :fim_erro
-    )
     goto :fim
 )
 
 :: Build principal
-call :garantir_alvo "%PASTA%" "build"
-if errorlevel 1 (
-    echo [ERRO] Falha ao configurar o alvo ESP32-S3 para o firmware principal.
-    goto :fim_erro
-)
 pushd "%PASTA%"
+call :garantir_alvo "%PASTA%" "build"
 echo ==^> Compilando firmware principal...
 idf.py build
-set "CMD_STATUS=%ERRORLEVEL%"
 popd
-if not "%CMD_STATUS%"=="0" (
-    echo [ERRO] idf.py build falhou para o firmware principal.
-    goto :fim_erro
-)
 
 :: Testes Python
 if "%RODAR_TESTES%"=="1" (
     echo ==^> Rodando testes Python...
     pushd "%PASTA%"
     "%PYTHON_BIN%" -m pytest test\test_diagram_json.py test\test_pipeline_tictactoe.py test\test_pipeline_presenca.py test\test_requisitos_sistema.py
-    set "CMD_STATUS=!ERRORLEVEL!"
     popd
-    if not "!CMD_STATUS!"=="0" (
-        echo [ERRO] pytest falhou.
-        goto :fim_erro
-    )
 )
 
 :: Testes Unity C
 if "%COMPILAR_TESTES_C%"=="1" (
     echo ==^> Compilando app Unity/ESP-IDF dos testes C...
     call :garantir_alvo "%PASTA%\test" "build_tests"
-    if errorlevel 1 (
-        echo [ERRO] Falha ao configurar o alvo ESP32-S3 para os testes C.
-        goto :fim_erro
-    )
     pushd "%PASTA%\test"
     idf.py -B build_tests build
-    set "CMD_STATUS=!ERRORLEVEL!"
     popd
-    if not "!CMD_STATUS!"=="0" (
-        echo [ERRO] idf.py -B build_tests build falhou.
-        goto :fim_erro
-    )
 )
 
 :: Abrir VS Code
@@ -585,7 +552,3 @@ if "%ABRIR_VSCODE%"=="1" (
 :fim
 endlocal
 exit /b 0
-
-:fim_erro
-endlocal
-exit /b 1

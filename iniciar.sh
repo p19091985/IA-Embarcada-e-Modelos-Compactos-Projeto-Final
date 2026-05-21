@@ -5,36 +5,22 @@ if [ -z "${BASH_VERSION:-}" ]; then
 fi
 
 set -e
+set -o pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-detectar_pasta_projeto() {
-    local raiz_atual=""
-
-    if command -v git >/dev/null 2>&1; then
-        raiz_atual="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || true)"
-    fi
-
-    if [ -n "$raiz_atual" ] &&
-       [ -f "$raiz_atual/CMakeLists.txt" ] &&
-       [ -f "$raiz_atual/diagram.json" ] &&
-       [ -f "$raiz_atual/iniciar.sh" ]; then
-        printf "%s\n" "$raiz_atual"
-        return
-    fi
-
-    printf "%s\n" "$SCRIPT_DIR"
-}
-
-PASTA="$(detectar_pasta_projeto)"
+PASTA="$(cd "$(dirname "$0")" && pwd)"
 LIMPAR=0
 ABRIR_VSCODE=0
 SO_ABRIR_VSCODE=0
 RODAR_TESTES=0
 COMPILAR_TESTES_C=0
 FLASH_TESTES_C=0
+MONITOR_AUDITORIA=0
+FLASH_AUDITORIA=0
+AUDITORIA_WOKWI=0
 USAR_MENU=0
 PYTHON_BIN="${PYTHON_BIN:-}"
+AUDITORIA_LOG="$PASTA/logs/jogo_auditoria.log"
+AUDITORIA_COMANDO="./iniciar.sh monitor"
 
 if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
     CORES="$(tput colors 2>/dev/null || echo 0)"
@@ -64,10 +50,6 @@ else
     CYAN=""
 fi
 
-if [ "$SCRIPT_DIR" != "$PASTA" ]; then
-    printf "%b\n" "${YELLOW}Aviso:${RESET} script chamado de '$SCRIPT_DIR', usando projeto atual em '$PASTA'."
-fi
-
 linha() {
     printf "%b\n" "${DIM}------------------------------------------------------------${RESET}"
 }
@@ -80,9 +62,12 @@ uso() {
     echo "  ./iniciar.sh validar         compila firmware + roda testes + compila Unity"
     echo "  ./iniciar.sh vscode          compila e abre o projeto/diagram.json no VS Code"
     echo "  ./iniciar.sh simular         igual a vscode, com checklist para Wokwi"
+    echo "  ./iniciar.sh simular-auditoria igual a simular, com log de auditoria preparado"
+    echo "  ./iniciar.sh auditoria       compila, grava e monitora salvando logs/jogo_auditoria.log"
+    echo "  ./iniciar.sh monitor         abre monitor serial salvando logs/jogo_auditoria.log"
     echo "  ./iniciar.sh unity           compila apenas o app Unity/ESP-IDF em test/build_tests"
     echo "  ./iniciar.sh flash-testes    grava e abre monitor serial do app Unity"
-    echo "  ./iniciar.sh setup           verifica e instala dependencias Python/ESP-IDF"
+    echo "  ./iniciar.sh setup           verifica dependencias e prepara .venv"
     echo "  ./iniciar.sh limpar validar  limpa build principal e executa validacao"
     echo "  CLEAN=1 ./iniciar.sh build   limpa com idf.py fullclean antes do build"
 }
@@ -158,43 +143,53 @@ verificar_pytest() {
     "$PYTHON_BIN" -m pytest --version >/dev/null 2>&1
 }
 
+criar_ou_atualizar_venv() {
+    local python_base=""
+
+    if [ -f "$VENV_DIR/bin/python" ]; then
+        PYTHON_BIN="$VENV_DIR/bin/python"
+    else
+        if command -v python3 >/dev/null 2>&1; then
+            python_base=python3
+        elif command -v python >/dev/null 2>&1; then
+            python_base=python
+        else
+            printf "%b\n" "${RED}Erro:${RESET} Python3 nao encontrado."
+            printf "%b\n" "Instale com: ${BOLD}sudo apt install python3 python3-pip python3-venv${RESET}"
+            return 1
+        fi
+
+        printf "%b\n" "${CYAN}==>${RESET} Criando ambiente virtual em: $VENV_DIR"
+        if ! "$python_base" -m venv "$VENV_DIR"; then
+            printf "%b\n" "${RED}Erro:${RESET} nao foi possivel criar a .venv."
+            printf "%b\n" "No Ubuntu/Debian, instale o suporte a venv:"
+            printf "%b\n" "  ${BOLD}sudo apt install python3-venv${RESET}"
+            return 1
+        fi
+        PYTHON_BIN="$VENV_DIR/bin/python"
+    fi
+
+    if verificar_pytest; then
+        return 0
+    fi
+
+    printf "%b\n" "${CYAN}==>${RESET} Instalando dependencias Python em .venv..."
+    if ! "$PYTHON_BIN" -m pip install -r "$PASTA/requirements.txt"; then
+        printf "%b\n" "${RED}Erro:${RESET} nao foi possivel instalar requirements.txt na .venv."
+        return 1
+    fi
+
+    verificar_pytest
+}
+
 garantir_venv() {
-    if [ -f "$VENV_DIR/bin/python" ] && "$VENV_DIR/bin/python" -m pytest --version >/dev/null 2>&1; then
+    if criar_ou_atualizar_venv; then
         PYTHON_BIN="$VENV_DIR/bin/python"
         return 0
     fi
 
-    local python_base=""
-    if command -v python3 >/dev/null 2>&1; then
-        python_base=python3
-    elif command -v python >/dev/null 2>&1; then
-        python_base=python
-    else
-        return 1
-    fi
-
-    if [ ! -f "$VENV_DIR/bin/python" ]; then
-        printf "%b\n" "${CYAN}==>${RESET} Criando ambiente virtual em .venv/..."
-        "$python_base" -m venv "$VENV_DIR" || {
-            printf "%b\n" "${RED}Erro:${RESET} Falha ao criar venv."
-            printf "%b\n" "Instale python3-venv: ${BOLD}sudo apt install python3-venv${RESET}"
-            return 1
-        }
-    fi
-
-    PYTHON_BIN="$VENV_DIR/bin/python"
-
-    if [ -f "$PASTA/requirements.txt" ]; then
-        printf "%b\n" "${CYAN}==>${RESET} Instalando dependencias Python na .venv/..."
-        "$PYTHON_BIN" -m pip install --upgrade pip >/dev/null 2>&1 || true
-        "$PYTHON_BIN" -m pip install -r "$PASTA/requirements.txt" >/dev/null 2>&1 || {
-            printf "%b\n" "${RED}Erro:${RESET} Falha ao instalar requirements.txt"
-            return 1
-        }
-    fi
-
-    printf "%b\n" "${GREEN}==>${RESET} Ambiente virtual pronto."
-    return 0
+    printf "%b\n" "${RED}Erro:${RESET} pytest indisponivel na .venv."
+    return 1
 }
 
 verificar_dependencias() {
@@ -207,17 +202,21 @@ verificar_dependencias() {
         printf "%b\n" "  ${GREEN}✓${RESET} Python: $($PYTHON_BIN --version 2>&1)"
     else
         printf "%b\n" "  ${RED}✗${RESET} Python3 nao encontrado"
-        printf "%b\n" "    Instale com: ${BOLD}sudo apt install python3 python3-pip${RESET}"
+        printf "%b\n" "    Instale com: ${BOLD}sudo apt install python3 python3-pip python3-venv${RESET}"
         erro=1
     fi
 
-    # venv e pytest
+    # pytest
     if [ "$erro" = "0" ]; then
         if garantir_venv; then
-            printf "%b\n" "  ${GREEN}✓${RESET} venv: $VENV_DIR"
+            if [ "$PYTHON_BIN" = "$VENV_DIR/bin/python" ]; then
+                printf "%b\n" "  ${GREEN}✓${RESET} .venv pronta: $VENV_DIR"
+            else
+                printf "%b\n" "  ${GREEN}✓${RESET} Python para testes: $PYTHON_BIN"
+            fi
             printf "%b\n" "  ${GREEN}✓${RESET} pytest: $($PYTHON_BIN -m pytest --version 2>&1 | head -1)"
         else
-            printf "%b\n" "  ${RED}✗${RESET} Falha ao configurar ambiente virtual"
+            printf "%b\n" "  ${RED}✗${RESET} pytest indisponivel"
             erro=1
         fi
     fi
@@ -273,6 +272,26 @@ verificar_dependencias() {
 # Interface
 # ============================================================================
 
+limpar_build_incompativel() {
+    local diretorio="$1"
+    local build_dir="$2"
+    local build_path="$diretorio/$build_dir"
+    local cache="$build_path/CMakeCache.txt"
+    local origem_build=""
+
+    if [ ! -d "$build_path" ] || [ ! -f "$cache" ]; then
+        return 0
+    fi
+
+    origem_build="$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "$cache" | tail -n 1)"
+    if [ -n "$origem_build" ] && [ "$origem_build" != "$diretorio" ]; then
+        printf "%b\n" "${YELLOW}==>${RESET} Build antigo detectado em: $build_path"
+        printf "%b\n" "${DIM}    Era de: $origem_build${RESET}"
+        printf "%b\n" "${CYAN}==>${RESET} Limpando para reconfigurar neste caminho..."
+        rm -rf "$build_path"
+    fi
+}
+
 abrir_vscode() {
     if command -v code >/dev/null 2>&1; then
         printf "%b\n" "${CYAN}==>${RESET} Abrindo projeto e diagram.json no VS Code..."
@@ -280,6 +299,62 @@ abrir_vscode() {
     else
         printf "%b\n" "${YELLOW}Aviso:${RESET} Nao achei o comando 'code' para abrir o VS Code."
         printf "%b\n" "Abra manualmente esta pasta no VS Code: $PASTA"
+    fi
+}
+
+preparar_log_auditoria() {
+    local comando="${1:-./iniciar.sh monitor}"
+
+    mkdir -p "$PASTA/logs"
+    if [ ! -f "$AUDITORIA_LOG" ]; then
+        cat >"$AUDITORIA_LOG" <<'EOF'
+# Log de Auditoria do Jogo da Velha
+#
+# O firmware emite linhas com a tag JOGO_AUDIT no monitor serial.
+# Este arquivo e alimentado automaticamente por:
+#   ./iniciar.sh auditoria
+#   ./iniciar.sh monitor
+#   ./iniciar.sh simular-auditoria
+# ou manualmente por:
+#   idf.py monitor | tee -a logs/jogo_auditoria.log
+EOF
+    fi
+
+    {
+        echo
+        echo "# =================================================================="
+        echo "# Sessao de auditoria iniciada em $(date '+%Y-%m-%d %H:%M:%S %z')"
+        echo "# Comando: $comando"
+        echo "# =================================================================="
+    } >>"$AUDITORIA_LOG"
+}
+
+preparar_auditoria_wokwi() {
+    local comando="${1:-./iniciar.sh simular-auditoria}"
+
+    preparar_log_auditoria "$comando"
+    {
+        echo "# Modo Wokwi: execute Wokwi: Start Simulator no VS Code."
+        echo "# O firmware ja emite JOGO_AUDIT no Serial Monitor do simulador."
+        echo "# Se a extensao nao expuser pipe serial, copie as linhas JOGO_AUDIT para esta sessao."
+    } >>"$AUDITORIA_LOG"
+
+    printf "%b\n" "${CYAN}==>${RESET} Auditoria Wokwi preparada em: $AUDITORIA_LOG"
+}
+
+abrir_monitor_auditoria() {
+    local gravar_firmware="${1:-0}"
+    local comando="${2:-./iniciar.sh monitor}"
+
+    preparar_log_auditoria "$comando"
+    printf "%b\n" "${CYAN}==>${RESET} Abrindo monitor serial com auditoria em: $AUDITORIA_LOG"
+    printf "%b\n" "${DIM}    Use Ctrl+] para sair do monitor ESP-IDF.${RESET}"
+    printf "%b\n" "${DIM}    As linhas JOGO_AUDIT ficarao salvas para revisao posterior.${RESET}"
+    if [ "$gravar_firmware" = "1" ]; then
+        printf "%b\n" "${CYAN}==>${RESET} Gravando firmware principal antes do monitor..."
+        idf.py flash monitor | tee -a "$AUDITORIA_LOG"
+    else
+        idf.py monitor | tee -a "$AUDITORIA_LOG"
     fi
 }
 
@@ -296,14 +371,14 @@ mostrar_checklist_wokwi() {
     echo "  [ ] Tabuleiro exibe formato com ---+---+---"
     echo "  [ ] Teclas 1 a 9 selecionam posicoes no tabuleiro"
     echo "  [ ] Tecla B exibe o placar"
-    echo "  [ ] Tecla D exibe Patrik, Janiel e Joao nos creditos"
-    echo "  [ ] LCD1602 exibe TFLite na linha 1 e autores rolando na linha 2"
+    echo "  [ ] Tecla D exibe Janiel, Joao e Patrik no About"
+    echo "  [ ] LCD1602 IA exibe TFLite na linha 1 e autores rolando na linha 2"
+    echo "  [ ] LCD1602 presenca exibe PRESENTE/AUSENTE, distancia e score"
+    echo "  [ ] LCD1602 estatisticas exibe tempo, jogadas e media"
     echo "  [ ] Tecla * liga o LED dourado"
     echo "  [ ] Tecla # desliga o LED dourado"
     echo "  [ ] LDR liga automaticamente o LED dourado no escuro"
-    echo "  [ ] Serial registra inferencia de presenca do HC-SR04"
-    echo "  [ ] Tecla 9 ativa a coleta CSV opcional do HC-SR04"
-    echo "  [ ] Serial exibe timestamp_ms,distancia_cm,eco_us,label"
+    echo "  [ ] Serial registra inferencia de presenca do HC-SR04 sempre ativa"
     echo "  [ ] Buzzer toca nas teclas, inicializacao e vitoria"
     echo "  [ ] Partida encerra com vitoria do jogador"
     echo "  [ ] Partida encerra com vitoria do computador"
@@ -311,55 +386,15 @@ mostrar_checklist_wokwi() {
     linha
 }
 
-limpar_build_invalido() {
-    local diretorio="$1"
-    local build_dir="$2"
-    local build_path="$build_dir"
-    local cache=""
-    local origem=""
-    local origem_real=""
-    local diretorio_real=""
-    local build_real=""
-
-    case "$build_path" in
-        /*) ;;
-        *) build_path="$diretorio/$build_path" ;;
-    esac
-
-    cache="$build_path/CMakeCache.txt"
-    if [ ! -f "$cache" ]; then
-        return
-    fi
-
-    origem="$(awk -F= '/^CMAKE_HOME_DIRECTORY:INTERNAL=/{print $2; exit}' "$cache")"
-    if [ -z "$origem" ]; then
-        return
-    fi
-
-    diretorio_real="$(cd "$diretorio" && pwd -P)"
-    if [ -d "$origem" ]; then
-        origem_real="$(cd "$origem" && pwd -P)"
-    else
-        origem_real="$origem"
-    fi
-
-    if [ "$origem_real" = "$diretorio_real" ]; then
-        return
-    fi
-
-    build_real="$(cd "$(dirname "$build_path")" && pwd -P)/$(basename "$build_path")"
-    case "$build_real" in
-        "$diretorio_real"/*) ;;
-        *)
-            printf "%b\n" "${RED}Erro:${RESET} build fora do projeto: $build_real"
-            exit 1
-            ;;
-    esac
-
-    printf "%b\n" "${YELLOW}Aviso:${RESET} build antigo aponta para outro projeto:"
-    printf "%b\n" "  $origem"
-    printf "%b\n" "${CYAN}==>${RESET} Removendo build incompativel: $build_real"
-    rm -rf "$build_real"
+mostrar_auditoria_wokwi() {
+    echo
+    linha
+    printf "%b\n" "${BOLD}${YELLOW}=== Auditoria no Wokwi ===${RESET}"
+    linha
+    printf "%b\n" "Arquivo preparado: ${BOLD}$AUDITORIA_LOG${RESET}"
+    printf "%b\n" "No Serial Monitor do Wokwi, acompanhe as linhas ${BOLD}JOGO_AUDIT${RESET}."
+    printf "%b\n" "Em placa real, use ${BOLD}./iniciar.sh auditoria${RESET} para gravar o serial automaticamente."
+    linha
 }
 
 garantir_alvo_esp32s3() {
@@ -367,7 +402,7 @@ garantir_alvo_esp32s3() {
     local build_dir="$2"
     local sdkconfig="$diretorio/sdkconfig"
 
-    limpar_build_invalido "$diretorio" "$build_dir"
+    limpar_build_incompativel "$diretorio" "$build_dir"
 
     if [ -f "$sdkconfig" ] && grep -q '^CONFIG_IDF_TARGET="esp32s3"$' "$sdkconfig"; then
         printf "%b\n" "${CYAN}==>${RESET} Alvo ESP32-S3 ja configurado em: $sdkconfig"
@@ -388,16 +423,18 @@ menu() {
         fi
 
         linha
-        printf "%b\n" "${BOLD}${CYAN}  === Painel de Controle: Jogo da Velha (Patrik, Janiel e Joao) ===${RESET}"
+        printf "%b\n" "${BOLD}${CYAN}  === Painel de Controle: Jogo da Velha (Janiel, Joao e Patrik) ===${RESET}"
         linha
         printf "%b\n" "  ${GREEN}1${RESET}) Compilar firmware principal"
         printf "%b\n" "  ${YELLOW}2${RESET}) Limpar tudo e compilar firmware"
         printf "%b\n" "  ${BLUE}3${RESET}) Rodar testes automaticos"
         printf "%b\n" "  ${MAGENTA}4${RESET}) Validar tudo que da pelo terminal"
         printf "%b\n" "  ${CYAN}5${RESET}) Compilar, abrir VS Code e testar no Wokwi"
-        printf "%b\n" "  ${YELLOW}6${RESET}) Gravar app Unity e abrir monitor serial"
-        printf "%b\n" "  ${BLUE}7${RESET}) Abrir projeto e diagram.json no VS Code"
-        printf "%b\n" "  ${MAGENTA}8${RESET}) Verificar dependencias (setup)"
+        printf "%b\n" "  ${YELLOW}6${RESET}) Compilar, abrir VS Code e testar no Wokwi com auditoria"
+        printf "%b\n" "  ${BLUE}7${RESET}) Gravar app Unity e abrir monitor serial"
+        printf "%b\n" "  ${CYAN}8${RESET}) Abrir projeto e diagram.json no VS Code"
+        printf "%b\n" "  ${MAGENTA}9${RESET}) Gravar firmware e monitorar com auditoria"
+        printf "%b\n" "  ${CYAN}10${RESET}) Verificar dependencias e preparar .venv"
         printf "%b\n" "  ${RED}0${RESET}) Sair"
         linha
         printf "%b" "${BOLD}Escolha uma opcao:${RESET} "
@@ -423,18 +460,34 @@ menu() {
                 return
                 ;;
             5)
+                RODAR_TESTES=1
+                COMPILAR_TESTES_C=1
                 ABRIR_VSCODE=1
                 return
                 ;;
             6)
-                FLASH_TESTES_C=1
+                RODAR_TESTES=1
+                COMPILAR_TESTES_C=1
+                ABRIR_VSCODE=1
+                AUDITORIA_WOKWI=1
+                AUDITORIA_COMANDO="./iniciar.sh simular-auditoria"
                 return
                 ;;
             7)
-                SO_ABRIR_VSCODE=1
+                FLASH_TESTES_C=1
                 return
                 ;;
             8)
+                SO_ABRIR_VSCODE=1
+                return
+                ;;
+            9)
+                MONITOR_AUDITORIA=1
+                FLASH_AUDITORIA=1
+                AUDITORIA_COMANDO="./iniciar.sh auditoria"
+                return
+                ;;
+            10)
                 verificar_dependencias || true
                 printf "%b" "\nPressione Enter para voltar ao menu..."
                 IFS= read -r _ || true
@@ -472,11 +525,30 @@ for arg in "$@"; do
         flash-testes|flash-tests|monitor-testes|--flash-testes)
             FLASH_TESTES_C=1
             ;;
+        auditoria|--auditoria)
+            MONITOR_AUDITORIA=1
+            FLASH_AUDITORIA=1
+            AUDITORIA_COMANDO="./iniciar.sh auditoria"
+            ;;
+        monitor|monitor-auditoria|log|logs|--monitor)
+            MONITOR_AUDITORIA=1
+            FLASH_AUDITORIA=0
+            AUDITORIA_COMANDO="./iniciar.sh monitor"
+            ;;
         vscode|abrir|open|--vscode|--open)
             ABRIR_VSCODE=1
             ;;
         simular|wokwi|--simular|--wokwi)
+            RODAR_TESTES=1
+            COMPILAR_TESTES_C=1
             ABRIR_VSCODE=1
+            ;;
+        simular-auditoria|wokwi-auditoria|auditoria-wokwi|--simular-auditoria|--wokwi-auditoria)
+            RODAR_TESTES=1
+            COMPILAR_TESTES_C=1
+            ABRIR_VSCODE=1
+            AUDITORIA_WOKWI=1
+            AUDITORIA_COMANDO="./iniciar.sh simular-auditoria"
             ;;
         somente-vscode|so-vscode|--only-vscode)
             SO_ABRIR_VSCODE=1
@@ -513,8 +585,7 @@ fi
 
 if [ "$RODAR_TESTES" = "1" ]; then
     if ! garantir_venv; then
-        printf "%b\n" "${RED}Erro:${RESET} Falha ao preparar ambiente virtual."
-        printf "%b\n" "Instale python3-venv: ${BOLD}sudo apt install python3-venv${RESET}"
+        printf "%b\n" "${RED}Erro:${RESET} Nao foi possivel rodar os testes Python."
         exit 1
     fi
 fi
@@ -540,9 +611,10 @@ printf "%b\n" "${CYAN}==>${RESET} Carregando ESP-IDF de: $IDF_EXPORT"
 . "$IDF_EXPORT"
 
 if [ "${CLEAN:-0}" = "1" ] || [ "$LIMPAR" = "1" ]; then
+    limpar_build_incompativel "$PASTA" "build"
     if [ -d build ]; then
         printf "%b\n" "${CYAN}==>${RESET} Limpando build principal..."
-        idf.py -B build fullclean
+        idf.py fullclean
     else
         printf "%b\n" "${YELLOW}==>${RESET} Nada para limpar: build/ nao existe."
     fi
@@ -550,11 +622,12 @@ fi
 
 if [ "$FLASH_TESTES_C" = "1" ]; then
     printf "%b\n" "${CYAN}==>${RESET} Preparando app Unity/ESP-IDF..."
+    preparar_log_auditoria "./iniciar.sh flash-testes"
     garantir_alvo_esp32s3 "$PASTA/test" "build_tests"
     (
         cd "$PASTA/test"
         idf.py -B build_tests build
-        idf.py -B build_tests flash monitor
+        idf.py -B build_tests flash monitor | tee -a "$AUDITORIA_LOG"
     )
     exit 0
 fi
@@ -562,13 +635,11 @@ fi
 garantir_alvo_esp32s3 "$PASTA" "build"
 
 printf "%b\n" "${CYAN}==>${RESET} Compilando firmware principal..."
-if ! idf.py -B build build; then
-    printf "%b\n" "${RED}Erro:${RESET} Falha ao compilar o firmware principal."
-    if [ "$ABRIR_VSCODE" = "1" ]; then
-        abrir_vscode
-        printf "%b\n" "${YELLOW}Aviso:${RESET} VS Code aberto para voce corrigir a compilacao antes do Wokwi."
-    fi
-    exit 1
+idf.py build
+
+if [ "$MONITOR_AUDITORIA" = "1" ]; then
+    abrir_monitor_auditoria "$FLASH_AUDITORIA" "$AUDITORIA_COMANDO"
+    exit 0
 fi
 
 if [ "$RODAR_TESTES" = "1" ]; then
@@ -583,6 +654,10 @@ if [ "$COMPILAR_TESTES_C" = "1" ]; then
         cd "$PASTA/test"
         idf.py -B build_tests build
     )
+fi
+
+if [ "$AUDITORIA_WOKWI" = "1" ]; then
+    preparar_auditoria_wokwi "$AUDITORIA_COMANDO"
 fi
 
 if [ "$ABRIR_VSCODE" = "1" ]; then
@@ -601,6 +676,9 @@ fi
 
 if [ "$ABRIR_VSCODE" = "1" ]; then
     mostrar_checklist_wokwi
+    if [ "$AUDITORIA_WOKWI" = "1" ]; then
+        mostrar_auditoria_wokwi
+    fi
 else
     echo
     echo "Para testar no Wokwi depois:"

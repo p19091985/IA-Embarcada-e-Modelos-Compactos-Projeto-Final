@@ -43,5 +43,28 @@ esp_err_t ldr_ler_bruto(ldr_t *ldr, int *valor_bruto)
 
 bool ldr_ambiente_escuro(int valor_bruto)
 {
-    return valor_bruto < LDR_LIMIAR_ESCURO;
+    return valor_bruto > LDR_LIMIAR_ESCURO;
+}
+
+bool ldr_deve_atualizar_iluminacao_automatica(bool sensor_pronto, bool modo_manual)
+{
+    return sensor_pronto && !modo_manual;
+}
+
+bool ldr_calcular_led_automatico(int valor_bruto, int *estado_histerese)
+{
+    if (estado_histerese == NULL) {
+        return ldr_ambiente_escuro(valor_bruto);
+    }
+
+    int limiar_liga = LDR_LIMIAR_ESCURO + LDR_HISTERESE_ADC;
+    int limiar_desliga = LDR_LIMIAR_ESCURO - LDR_HISTERESE_ADC;
+
+    if (*estado_histerese == 0 && valor_bruto > limiar_liga) {
+        *estado_histerese = 1;
+    } else if (*estado_histerese != 0 && valor_bruto < limiar_desliga) {
+        *estado_histerese = 0;
+    }
+
+    return *estado_histerese != 0;
 }

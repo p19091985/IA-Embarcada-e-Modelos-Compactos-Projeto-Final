@@ -2,6 +2,8 @@ idf_component_register(
     SRCS
         "main.c"
         "jogo_da_velha.c"
+        "jogo_auditoria.c"
+        "jogo_interface.c"
         "ia_jogo_da_velha.c"
         "teclado_matricial.c"
         "leds.c"

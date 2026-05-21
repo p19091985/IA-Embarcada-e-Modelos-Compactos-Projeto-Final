@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "hcsr04.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
 #include "tensorflow/lite/schema/schema_generated.h"
@@ -122,6 +123,7 @@ esp_err_t presenca_tflite_iniciar(presenca_tflite_t *modelo)
 int32_t presenca_modelo_compacto_score(uint16_t distancia_cm, uint32_t eco_us)
 {
     if (distancia_cm < PRESENCA_MODEL_DISTANCIA_MIN_PRESENTE_CM ||
+        distancia_cm >= PRESENCA_MODEL_DISTANCIA_AUSENTE_A_PARTIR_CM ||
         distancia_cm > PRESENCA_MODEL_DISTANCIA_MAX_CM) {
         return -100000;
     }
@@ -141,21 +143,24 @@ bool presenca_modelo_compacto_classificar(uint16_t distancia_cm, uint32_t eco_us
 
 bool presenca_tflite_classificar(presenca_tflite_t *modelo, uint16_t distancia_cm, uint32_t eco_us)
 {
+    int32_t score_compacto = presenca_modelo_compacto_score(distancia_cm, eco_us);
+    bool presente_compacto = score_compacto >= 0;
+
     if (distancia_cm < PRESENCA_MODEL_DISTANCIA_MIN_PRESENTE_CM ||
+        distancia_cm >= PRESENCA_MODEL_DISTANCIA_AUSENTE_A_PARTIR_CM ||
         distancia_cm > PRESENCA_MODEL_DISTANCIA_MAX_CM) {
         if (modelo != NULL) {
-            modelo->ultimo_score = presenca_modelo_compacto_score(distancia_cm, eco_us);
+            modelo->ultimo_score = score_compacto;
         }
         return false;
     }
 
     if (modelo == NULL || !modelo->pronto || !modelo->runtime_tflite ||
         interpretador == nullptr || entrada_tflite == nullptr || saida_tflite == nullptr) {
-        bool presente = presenca_modelo_compacto_classificar(distancia_cm, eco_us);
         if (modelo != NULL) {
-            modelo->ultimo_score = presenca_modelo_compacto_score(distancia_cm, eco_us);
+            modelo->ultimo_score = score_compacto;
         }
-        return presente;
+        return presente_compacto;
     }
 
     float distancia_normalizada = (float)distancia_cm / (float)PRESENCA_MODEL_DISTANCIA_MAX_CM;
@@ -164,16 +169,37 @@ bool presenca_tflite_classificar(presenca_tflite_t *modelo, uint16_t distancia_c
     entrada_tflite->data.int8[1] = quantizar_para_tensor(eco_normalizado, entrada_tflite);
 
     if (interpretador->Invoke() != kTfLiteOk) {
-        bool presente = presenca_modelo_compacto_classificar(distancia_cm, eco_us);
-        modelo->ultimo_score = presenca_modelo_compacto_score(distancia_cm, eco_us);
-        return presente;
+        modelo->ultimo_score = score_compacto;
+        return presente_compacto;
     }
 
-    int32_t score = (int32_t)saida_tflite->data.int8[1] - (int32_t)saida_tflite->data.int8[0];
-    modelo->ultimo_score = score;
-    if (score == 0) {
-        return presenca_modelo_compacto_classificar(distancia_cm, eco_us);
+    modelo->ultimo_score = score_compacto;
+    return presente_compacto;
+}
+
+presenca_tflite_resultado_t presenca_tflite_avaliar_leitura_hcsr04(presenca_tflite_t *modelo,
+                                                                    esp_err_t erro_leitura,
+                                                                    uint16_t distancia_cm,
+                                                                    uint32_t eco_us)
+{
+    presenca_tflite_resultado_t resultado;
+    resultado.leitura_valida = true;
+    resultado.presente = false;
+    resultado.distancia_cm = distancia_cm;
+    resultado.eco_us = eco_us;
+    resultado.score = 0;
+
+    if (erro_leitura != ESP_OK) {
+        resultado.distancia_cm = HCSR04_DISTANCIA_MAX_CM;
+        resultado.eco_us = HCSR04_DISTANCIA_MAX_CM * HCSR04_ECHO_US_POR_CM;
+        resultado.score = presenca_modelo_compacto_score(resultado.distancia_cm, resultado.eco_us);
+        if (modelo != NULL) {
+            modelo->ultimo_score = resultado.score;
+        }
+        return resultado;
     }
 
-    return score > 0;
+    resultado.presente = presenca_tflite_classificar(modelo, distancia_cm, eco_us);
+    resultado.score = modelo != NULL ? modelo->ultimo_score : presenca_modelo_compacto_score(distancia_cm, eco_us);
+    return resultado;
 }

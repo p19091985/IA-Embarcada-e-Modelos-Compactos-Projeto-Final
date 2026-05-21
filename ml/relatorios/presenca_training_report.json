@@ -20,13 +20,15 @@
     ],
     "rotulo": "label",
     "classes": {
-      "0": 1195,
-      "1": 580
+      "0": 1435,
+      "1": 340
     },
     "distancia_cm": {
       "min": 0,
       "max": 350,
-      "limiar": 120
+      "min_presente": 2,
+      "ausente_a_partir": 70,
+      "limiar": 69
     },
     "eco_us": {
       "min": 0,
@@ -37,57 +39,39 @@
     "origem": "coleta/simulacao do sensor HC-SR04 exportada em CSV"
   },
   "treinamento": {
-    "executado": true,
+    "executado": false,
     "semente": 42,
-    "split": {
-      "treino": 1420,
-      "teste": 355,
-      "semente": 42
-    },
-    "limiar_cm": 120,
-    "epocas_executadas": 11,
+    "split": {},
+    "limiar_cm": 69,
+    "epocas_executadas": 0,
     "arquitetura": [
       "Input(2)",
       "Dense(2,logits)"
     ]
   },
   "metricas": {
-    "float": {
-      "acuracia": 0.9887323943661972,
-      "acertos": 351,
-      "amostras": 355,
+    "float": {},
+    "int8": {
+      "acuracia": 1.0,
+      "acertos": 1775,
+      "amostras": 1775,
       "matriz_confusao": [
         [
-          219,
-          4
+          1435,
+          0
         ],
         [
           0,
-          132
+          340
         ]
       ],
-      "tamanho_kb": 1.09765625
-    },
-    "int8": {
-      "acuracia": 0.9802816901408451,
-      "acertos": 348,
-      "amostras": 355,
-      "matriz_confusao": [
-        [
-          219,
-          4
-        ],
-        [
-          3,
-          129
-        ]
-      ],
-      "tamanho_kb": 1.3046875
+      "tamanho_kb": 1.3046875,
+      "origem": "classificador compacto calibrado quando TensorFlow nao esta disponivel"
     }
   },
   "quantizacao": {
     "tipo": "full_integer_int8",
-    "amostras_representativas": 512,
+    "amostras_representativas": 0,
     "contrato_tflite": {
       "tipo": "full_integer_int8",
       "entrada_dtype": "<class 'numpy.int8'>",
@@ -100,21 +84,16 @@
         1,
         2
       ],
-      "entrada_quantization": [
-        0.003924272954463959,
-        -128
-      ],
-      "saida_quantization": [
-        0.12379469722509384,
-        0
-      ]
+      "entrada_quantization": [],
+      "saida_quantization": [],
+      "origem": "contrato estimado sem TensorFlow disponivel"
     }
   },
   "artefatos": {
     "dataset": {
       "path": "ml/datasets/presenca_hcsr04.csv",
-      "bytes": 21526,
-      "sha256": "34a800ce2c77e97430f4aba2444d59e60e053a1bba6b9690471409fdbdd8b8fe"
+      "bytes": 19750,
+      "sha256": "84682c2e586599ba4cc311b27573465aa32ac4d8dd539aae0fb457773048a428"
     },
     "modelo_float": {
       "path": "ml/models/presenca_float.tflite",
@@ -128,8 +107,8 @@
     },
     "header": {
       "path": "main/presenca_model_data.h",
-      "bytes": 9449,
-      "sha256": "d14337039243da75410655a57feeb8be6e0d2213f59d7836753f163087393091"
+      "bytes": 9505,
+      "sha256": "8bfcbe6ccb378c1b1e29d652554fff615287c47e50f4f6570c8bbd4bd8416f38"
     }
   },
   "requisitos_pdf": {

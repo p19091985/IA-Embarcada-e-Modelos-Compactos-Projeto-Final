@@ -9,6 +9,7 @@ Arquivos:
 - `test_pipeline_presenca.py`: testes do dataset HC-SR04, header e relatorio de treino do classificador de presenca.
 - `test_requisitos_sistema.py`: testes de rastreabilidade entre PDF, notebook, firmware, modelos e documentacao.
 - `test_jogo_da_velha.c`: testes Unity para a logica do tabuleiro.
+- `test_jogo_interface.c`: testes Unity para bloqueio por presenca e formatacao do LCD de estatisticas.
 - `test_ia_tflite.c`: testes Unity para a unica IA ativa no firmware.
 - `test_teclado_matricial.c`: testes Unity para o mapa do teclado.
 - `test_formatacao_telas.c`: testes Unity para os textos de tela.

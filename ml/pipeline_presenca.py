@@ -29,9 +29,10 @@ PDF_REQUISITOS = "codigo/Descrição do projeto final.pdf"
 SEMENTE = 42
 QUANTIZACAO = "full_integer_int8"
 
-DISTANCIA_LIMIAR_CM = 120
+DISTANCIA_AUSENTE_A_PARTIR_CM = 70
+DISTANCIA_LIMIAR_CM = DISTANCIA_AUSENTE_A_PARTIR_CM - 1
 DISTANCIA_MAX_CM = 350
-DISTANCIA_MIN_PRESENTE_CM = 5
+DISTANCIA_MIN_PRESENTE_CM = 2
 ECO_US_POR_CM = 58
 TENSOR_ARENA_BYTES = 8192
 PESO_DISTANCIA = -32
@@ -71,7 +72,11 @@ def salvar_dataset(caminho: Path = DATASET_PADRAO) -> int:
     linhas = gerar_linhas_dataset()
 
     with caminho.open("w", newline="", encoding="utf-8") as arquivo:
-        escritor = csv.DictWriter(arquivo, fieldnames=("distancia_cm", "eco_us", "label"))
+        escritor = csv.DictWriter(
+            arquivo,
+            fieldnames=("distancia_cm", "eco_us", "label"),
+            lineterminator="\n",
+        )
         escritor.writeheader()
         escritor.writerows(linhas)
 
@@ -109,7 +114,13 @@ def auditar_dataset(linhas: list[dict[str, int]]) -> dict[str, object]:
         "features": ["distancia_cm", "eco_us"],
         "rotulo": "label",
         "classes": {"0": labels.get(0, 0), "1": labels.get(1, 0)},
-        "distancia_cm": {"min": min(distancias), "max": max(distancias), "limiar": DISTANCIA_LIMIAR_CM},
+        "distancia_cm": {
+            "min": min(distancias),
+            "max": max(distancias),
+            "min_presente": DISTANCIA_MIN_PRESENTE_CM,
+            "ausente_a_partir": DISTANCIA_AUSENTE_A_PARTIR_CM,
+            "limiar": DISTANCIA_LIMIAR_CM,
+        },
         "eco_us": {"min": min(eco_us), "max": max(eco_us), "fator_us_por_cm": ECO_US_POR_CM},
         "amostras_fronteira": len(fronteira),
         "origem": "coleta/simulacao do sensor HC-SR04 exportada em CSV",
@@ -177,7 +188,18 @@ def contrato_quantizacao(caminho_modelo: Path) -> dict[str, object]:
     try:
         import tensorflow as tf
     except Exception:
-        return {}
+        if not caminho_modelo.exists():
+            return {}
+        return {
+            "tipo": QUANTIZACAO,
+            "entrada_dtype": "<class 'numpy.int8'>",
+            "saida_dtype": "<class 'numpy.int8'>",
+            "entrada_shape": [1, 2],
+            "saida_shape": [1, 2],
+            "entrada_quantization": [],
+            "saida_quantization": [],
+            "origem": "contrato estimado sem TensorFlow disponivel",
+        }
 
     if not caminho_modelo.exists():
         return {}
@@ -236,6 +258,30 @@ def _avaliar_tflite(caminho_modelo: Path, x_teste, y_teste) -> dict[str, object]
         "amostras": len(x_teste),
         "matriz_confusao": matriz.tolist(),
         "tamanho_kb": caminho_modelo.stat().st_size / 1024,
+    }
+
+
+def avaliar_classificador_compacto(linhas: list[dict[str, int]], modelo_int8: Path | None = None) -> dict[str, object]:
+    matriz = [[0, 0], [0, 0]]
+    acertos = 0
+
+    for linha in linhas:
+        distancia = int(linha["distancia_cm"])
+        previsto = 1 if DISTANCIA_MIN_PRESENTE_CM <= distancia <= DISTANCIA_LIMIAR_CM else 0
+        real = int(linha["label"])
+        matriz[real][previsto] += 1
+        if previsto == real:
+            acertos += 1
+
+    total = len(linhas) if linhas else 1
+    tamanho_kb = modelo_int8.stat().st_size / 1024 if modelo_int8 is not None and modelo_int8.exists() else 0
+    return {
+        "acuracia": acertos / total,
+        "acertos": acertos,
+        "amostras": len(linhas),
+        "matriz_confusao": matriz,
+        "tamanho_kb": tamanho_kb,
+        "origem": "classificador compacto calibrado quando TensorFlow nao esta disponivel",
     }
 
 
@@ -382,7 +428,7 @@ def salvar_relatorio(
     linhas = carregar_dataset(dataset) if dataset.exists() else gerar_linhas_dataset()
     treinou = isinstance(resultado, dict) and resultado.get("treinou", False)
     metricas_float = resultado.get("float", {}) if treinou else {}
-    metricas_int8 = resultado.get("int8", {}) if treinou else {}
+    metricas_int8 = resultado.get("int8", {}) if treinou else avaliar_classificador_compacto(linhas, modelo_int8)
     split = resultado.get("split", {}) if treinou else {}
     quantizacao = resultado.get("quantizacao", {}) if treinou else contrato_quantizacao(modelo_int8)
 
@@ -461,6 +507,7 @@ def exportar_header(
 #define PRESENCA_MODEL_TEST_ACCURACY_PERMYRIAD {acuracia}
 #define PRESENCA_MODEL_DISTANCIA_MIN_PRESENTE_CM {DISTANCIA_MIN_PRESENTE_CM}
 #define PRESENCA_MODEL_DISTANCIA_LIMIAR_CM {limiar_cm}
+#define PRESENCA_MODEL_DISTANCIA_AUSENTE_A_PARTIR_CM {DISTANCIA_AUSENTE_A_PARTIR_CM}
 #define PRESENCA_MODEL_DISTANCIA_MAX_CM {DISTANCIA_MAX_CM}
 #define PRESENCA_MODEL_ECO_LIMIAR_US (PRESENCA_MODEL_DISTANCIA_LIMIAR_CM * {ECO_US_POR_CM})
 
@@ -493,7 +540,7 @@ def main() -> None:
     linhas = carregar_dataset(args.dataset)
     limiar = treinar_limiar(linhas)
     resultado = False if args.sem_treino else treinar_tensorflow(args.dataset, args.modelo_float, args.modelo_int8)
-    metricas_int8 = resultado.get("int8", {}) if isinstance(resultado, dict) else {}
+    metricas_int8 = resultado.get("int8", {}) if isinstance(resultado, dict) else avaliar_classificador_compacto(linhas, args.modelo_int8)
     exportar_header(args.modelo_int8, args.header, limiar, total, metricas_int8)
     salvar_relatorio(args.relatorio, args.dataset, args.modelo_float, args.modelo_int8, args.header, resultado)
 

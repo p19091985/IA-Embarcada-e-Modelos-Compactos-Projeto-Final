@@ -1,5 +1,6 @@
 #include "lcd1602_i2c.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -13,9 +14,25 @@
 #define LCD_ATIVAR 0x04
 #define LCD_REGISTRO_DADOS 0x01
 #define LCD_SCROLL_ESPACOS 4
+#define LCD1602_MAX_BARRAMENTOS 2
 
 static const char *TAG_LCD = "lcd1602";
 
+typedef struct {
+    bool em_uso;
+    i2c_port_num_t porta_i2c;
+    gpio_num_t pino_sda;
+    gpio_num_t pino_scl;
+    i2c_master_bus_handle_t barramento;
+    SemaphoreHandle_t mutex;
+} lcd1602_barramento_compartilhado_t;
+
+static lcd1602_barramento_compartilhado_t barramentos[LCD1602_MAX_BARRAMENTOS];
+
+static esp_err_t lcd_obter_barramento_compartilhado(
+    const lcd1602_config_t *configuracao,
+    i2c_master_bus_handle_t *barramento,
+    SemaphoreHandle_t *mutex);
 static esp_err_t lcd_enviar_byte(lcd1602_t *lcd, uint8_t byte);
 static esp_err_t lcd_pulsar_enable(lcd1602_t *lcd, uint8_t byte);
 static esp_err_t lcd_enviar_4_bits(lcd1602_t *lcd, uint8_t byte);
@@ -26,14 +43,9 @@ static esp_err_t lcd_posicionar_cursor(lcd1602_t *lcd, uint8_t coluna, uint8_t l
 
 esp_err_t lcd1602_iniciar(lcd1602_t *lcd, const lcd1602_config_t *configuracao)
 {
-    i2c_master_bus_config_t configuracao_barramento = {
-        .i2c_port = configuracao->porta_i2c,
-        .sda_io_num = configuracao->pino_sda,
-        .scl_io_num = configuracao->pino_scl,
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = true,
-    };
+    if (lcd == NULL || configuracao == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
 
     i2c_device_config_t configuracao_dispositivo = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
@@ -41,7 +53,11 @@ esp_err_t lcd1602_iniciar(lcd1602_t *lcd, const lcd1602_config_t *configuracao)
         .scl_speed_hz = configuracao->frequencia_hz,
     };
 
-    ESP_RETURN_ON_ERROR(i2c_new_master_bus(&configuracao_barramento, &lcd->barramento), TAG_LCD, "falha no barramento I2C");
+    memset(lcd, 0, sizeof(*lcd));
+    ESP_RETURN_ON_ERROR(
+        lcd_obter_barramento_compartilhado(configuracao, &lcd->barramento, &lcd->mutex_barramento),
+        TAG_LCD,
+        "falha no barramento I2C");
     ESP_RETURN_ON_ERROR(i2c_master_bus_add_device(lcd->barramento, &configuracao_dispositivo, &lcd->dispositivo), TAG_LCD, "falha ao adicionar LCD");
 
     // sequencia de inicializacao do HD44780 em modo 4 bits
@@ -65,15 +81,35 @@ esp_err_t lcd1602_iniciar(lcd1602_t *lcd, const lcd1602_config_t *configuracao)
 esp_err_t lcd1602_escrever_linha(lcd1602_t *lcd, uint8_t linha, const char *texto)
 {
     char texto_com_16_colunas[17];
+    esp_err_t resultado = ESP_OK;
 
+    if (lcd == NULL || lcd->dispositivo == NULL || texto == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
     snprintf(texto_com_16_colunas, sizeof(texto_com_16_colunas), "%-16.16s", texto);
-    ESP_RETURN_ON_ERROR(lcd_posicionar_cursor(lcd, 0, linha), TAG_LCD, "falha ao posicionar cursor");
 
-    for (int coluna = 0; coluna < LCD1602_COLUNAS; coluna++) {
-        ESP_RETURN_ON_ERROR(lcd_escrever_caractere(lcd, texto_com_16_colunas[coluna]), TAG_LCD, "falha ao escrever caractere");
+    if (lcd->mutex_barramento != NULL &&
+        xSemaphoreTake(lcd->mutex_barramento, pdMS_TO_TICKS(LCD_TEMPO_LIMITE_I2C_MS)) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
     }
 
-    return ESP_OK;
+    resultado = lcd_posicionar_cursor(lcd, 0, linha);
+    if (resultado != ESP_OK) {
+        goto fim;
+    }
+
+    for (int coluna = 0; coluna < LCD1602_COLUNAS; coluna++) {
+        resultado = lcd_escrever_caractere(lcd, texto_com_16_colunas[coluna]);
+        if (resultado != ESP_OK) {
+            goto fim;
+        }
+    }
+
+fim:
+    if (lcd->mutex_barramento != NULL) {
+        xSemaphoreGive(lcd->mutex_barramento);
+    }
+    return resultado;
 }
 
 void lcd1602_formatar_janela_scroll(const char *texto, uint32_t passo, char saida[LCD1602_COLUNAS + 1])
@@ -97,6 +133,69 @@ void lcd1602_formatar_janela_scroll(const char *texto, uint32_t passo, char said
         saida[coluna] = indice < tamanho ? conteudo[indice] : ' ';
     }
     saida[LCD1602_COLUNAS] = '\0';
+}
+
+static esp_err_t lcd_obter_barramento_compartilhado(
+    const lcd1602_config_t *configuracao,
+    i2c_master_bus_handle_t *barramento,
+    SemaphoreHandle_t *mutex)
+{
+    if (configuracao == NULL || barramento == NULL || mutex == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    for (int i = 0; i < LCD1602_MAX_BARRAMENTOS; i++) {
+        lcd1602_barramento_compartilhado_t *slot = &barramentos[i];
+        if (!slot->em_uso || slot->porta_i2c != configuracao->porta_i2c) {
+            continue;
+        }
+
+        if (slot->pino_sda != configuracao->pino_sda || slot->pino_scl != configuracao->pino_scl) {
+            return ESP_ERR_INVALID_STATE;
+        }
+
+        *barramento = slot->barramento;
+        *mutex = slot->mutex;
+        return ESP_OK;
+    }
+
+    for (int i = 0; i < LCD1602_MAX_BARRAMENTOS; i++) {
+        lcd1602_barramento_compartilhado_t *slot = &barramentos[i];
+        if (slot->em_uso) {
+            continue;
+        }
+
+        i2c_master_bus_config_t configuracao_barramento = {
+            .i2c_port = configuracao->porta_i2c,
+            .sda_io_num = configuracao->pino_sda,
+            .scl_io_num = configuracao->pino_scl,
+            .clk_source = I2C_CLK_SRC_DEFAULT,
+            .glitch_ignore_cnt = 7,
+            .flags.enable_internal_pullup = true,
+        };
+
+        SemaphoreHandle_t mutex_criado = xSemaphoreCreateMutex();
+        if (mutex_criado == NULL) {
+            return ESP_ERR_NO_MEM;
+        }
+
+        esp_err_t erro = i2c_new_master_bus(&configuracao_barramento, &slot->barramento);
+        if (erro != ESP_OK) {
+            vSemaphoreDelete(mutex_criado);
+            return erro;
+        }
+
+        slot->em_uso = true;
+        slot->porta_i2c = configuracao->porta_i2c;
+        slot->pino_sda = configuracao->pino_sda;
+        slot->pino_scl = configuracao->pino_scl;
+        slot->mutex = mutex_criado;
+        *barramento = slot->barramento;
+        *mutex = slot->mutex;
+        return ESP_OK;
+    }
+
+    return ESP_ERR_NO_MEM;
 }
 
 static esp_err_t lcd_enviar_byte(lcd1602_t *lcd, uint8_t byte)

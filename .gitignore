@@ -11,11 +11,18 @@ codigo/
 .vscode/
 docs/projeto.md
 docs/resumo.md
-docs/
-logs/
-
+docs/*
+docs
+!docs/
+!docs/diagramas/
+!docs/diagramas/*.drawio
+!docs/diagramas/*.png
+logs/*
+!logs/
+!logs/jogo_auditoria.log
 
 *.log
+!logs/jogo_auditoria.log
 *.o
 codigo-ET/
 *.ko
@@ -68,3 +75,6 @@ managed_components/
 dependencies.lock
 
 *.dwo
+
+# Ignora todos os arquivos dentro de docs/
+docs/**

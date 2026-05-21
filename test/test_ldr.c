@@ -4,11 +4,35 @@
 
 void test_ldr_detecta_ambiente_escuro_por_limiar(void)
 {
-    TEST_ASSERT_TRUE(ldr_ambiente_escuro(0));
-    TEST_ASSERT_TRUE(ldr_ambiente_escuro(LDR_LIMIAR_ESCURO - 1));
+    TEST_ASSERT_FALSE(ldr_ambiente_escuro(0));
+    TEST_ASSERT_FALSE(ldr_ambiente_escuro(LDR_LIMIAR_ESCURO - 1));
     TEST_ASSERT_FALSE(ldr_ambiente_escuro(LDR_LIMIAR_ESCURO));
-    TEST_ASSERT_FALSE(ldr_ambiente_escuro(LDR_LIMIAR_ESCURO + 1));
-    TEST_ASSERT_FALSE(ldr_ambiente_escuro(4095));
+    TEST_ASSERT_TRUE(ldr_ambiente_escuro(LDR_LIMIAR_ESCURO + 1));
+    TEST_ASSERT_TRUE(ldr_ambiente_escuro(4095));
+}
+
+void test_ldr_iluminacao_automatica_ativa_so_sem_modo_manual(void)
+{
+    TEST_ASSERT_FALSE(ldr_deve_atualizar_iluminacao_automatica(false, false));
+    TEST_ASSERT_FALSE(ldr_deve_atualizar_iluminacao_automatica(true, true));
+    TEST_ASSERT_TRUE(ldr_deve_atualizar_iluminacao_automatica(true, false));
+}
+
+void test_ldr_histerese_liga_no_escuro_e_desliga_no_claro(void)
+{
+    int estado = 0;
+
+    TEST_ASSERT_FALSE(ldr_calcular_led_automatico(LDR_LIMIAR_ESCURO + LDR_HISTERESE_ADC, &estado));
+    TEST_ASSERT_EQUAL_INT(0, estado);
+
+    TEST_ASSERT_TRUE(ldr_calcular_led_automatico(LDR_LIMIAR_ESCURO + LDR_HISTERESE_ADC + 1, &estado));
+    TEST_ASSERT_EQUAL_INT(1, estado);
+
+    TEST_ASSERT_TRUE(ldr_calcular_led_automatico(LDR_LIMIAR_ESCURO - LDR_HISTERESE_ADC, &estado));
+    TEST_ASSERT_EQUAL_INT(1, estado);
+
+    TEST_ASSERT_FALSE(ldr_calcular_led_automatico(LDR_LIMIAR_ESCURO - LDR_HISTERESE_ADC - 1, &estado));
+    TEST_ASSERT_EQUAL_INT(0, estado);
 }
 
 void test_ldr_constantes_do_adc(void)
@@ -16,6 +40,7 @@ void test_ldr_constantes_do_adc(void)
     TEST_ASSERT_EQUAL_INT(10, LDR_GPIO_NUM);
     TEST_ASSERT_EQUAL_INT(ADC_UNIT_1, LDR_ADC_UNIT);
     TEST_ASSERT_EQUAL_INT(ADC_CHANNEL_9, LDR_ADC_CHANNEL);
+    TEST_ASSERT_EQUAL_INT(200, LDR_HISTERESE_ADC);
 }
 
 void test_ldr_configura_estado_padrao(void)

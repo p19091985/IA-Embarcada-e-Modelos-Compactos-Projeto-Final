@@ -5,6 +5,8 @@
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "esp_err.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #define LCD1602_COLUNAS 16
 
@@ -19,6 +21,7 @@ typedef struct {
 typedef struct {
     i2c_master_bus_handle_t barramento;
     i2c_master_dev_handle_t dispositivo;
+    SemaphoreHandle_t mutex_barramento;
 } lcd1602_t;
 
 esp_err_t lcd1602_iniciar(lcd1602_t *lcd, const lcd1602_config_t *configuracao);
